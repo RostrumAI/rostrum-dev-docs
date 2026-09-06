@@ -1,6 +1,6 @@
 # Epic delivery methodology
 
-Status: Proposed for review
+Status: Approved
 
 This document defines how Rostrum turns product goals into technical work that an agent can plan, implement, and verify without creating a large planning hierarchy.
 

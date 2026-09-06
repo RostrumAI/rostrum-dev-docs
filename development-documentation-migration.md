@@ -1,6 +1,6 @@
 # Development documentation migration
 
-Status: Proposed for review
+Status: Approved
 
 This plan moves long-form development documentation from `RostrumAI/rostrum` to `RostrumAI/rostrum-dev-docs` and replaces the current task-file hierarchy with roadmap milestones, technical Epics, and one or more implementation plans per active Epic.
 

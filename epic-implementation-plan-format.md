@@ -1,6 +1,6 @@
 # Epic implementation plan format
 
-Status: Proposed for review
+Status: Approved
 
 This document defines the format used by each implementation plan for a technical Epic.
 
