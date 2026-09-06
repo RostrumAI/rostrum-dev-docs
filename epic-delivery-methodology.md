@@ -15,30 +15,32 @@ Product roadmap milestone
     ↓
 Technical Epics
     ↓
-One implementation plan per active Epic
+One or more implementation plans per active Epic
 ```
 
 Product strategy defines the problem, audience, product boundaries, and architectural principles. The roadmap orders observable product goals.
 
 A technical Epic defines one coherent engineering outcome needed to reach a roadmap milestone. It contains scope, inherited contracts, technical requirements, non-goals, and acceptance criteria. It does not contain task status or file-by-file implementation instructions.
 
-The agent assigned to an Epic creates and maintains one implementation plan. The plan describes the current repository state, implementation sequence, checkpoints, decisions, progress, verification, and recovery information. For the plan format, see [Epic implementation plan format](epic-implementation-plan-format.md).
+Each implementation plan covers one coherent workstream within an Epic. Its owner records the current repository state, implementation sequence, checkpoints, decisions, progress, verification, and recovery information. For the plan format, see [Epic implementation plan format](epic-implementation-plan-format.md).
 
 ## Epic size
 
 An Epic is the right size when:
 
-- One owner can maintain its implementation plan.
+- One owner can maintain each implementation plan.
 - It has one coherent technical outcome.
 - Its acceptance can be demonstrated independently.
-- Its plan needs only a small number of checkpoints.
+- Each plan needs only a small number of checkpoints.
 - Another agent can resume from the plan without loading the entire roadmap.
 
-Split an Epic when its plan starts coordinating independent subsystems, separate review domains, or work that different owners can accept independently. If two agents need separate plans, the work should normally be separate Epics.
+An Epic may have several plans when separate owners can work on distinct parts of the same technical outcome. Each plan must have a clear scope and owner, and plans must link any dependencies between them. Split the Epic when its outcomes can be accepted independently or no longer form one coherent result.
 
 ## Plans and checkpoints
 
 An implementation plan can span several agent sessions and pull requests. Checkpoints are sections inside the plan, not separate documents or tracker objects.
+
+Several plans can be active under the same Epic. Each checkpoint belongs to exactly one plan, and the plans together must cover the Epic acceptance criteria without duplicating work.
 
 Each checkpoint states:
 
@@ -60,7 +62,7 @@ An independent agent reviews the implementation against the Epic and plan before
 
 ## Local workflow execution example
 
-The current "Local workflow execution" Epic is too broad for one implementation plan. It becomes roadmap milestone M2:
+The current "Local workflow execution" Epic is too broad to be one coherent technical Epic. It becomes roadmap milestone M2:
 
 > A caller can invoke an exact published workflow version through the Control API, disconnect, and later retrieve its progress, output, or failures after the local daemon executes every workflow interface v1 control-flow construct.
 
@@ -94,16 +96,10 @@ E2.3 creates the first runtime, daemon, API, conformance, and end-to-end path. E
 
 ## Other roadmap work
 
-Epic 1 becomes completed roadmap milestone M1. Keep its durable specification and decisions, but do not recreate completed task files as active issues.
+Epic 1 becomes completed roadmap milestone M1. Keep its durable specification and decisions, but do not recreate completed task files as active planning documents.
 
 The current Epic 3 becomes roadmap milestone M3. Split it into technical Epics only when M2 contracts are stable and M3 is ready for implementation.
 
 Milestones 4 through 13 remain roadmap entries until their dependencies and boundaries are clear. Do not create speculative Epic files or plans for them.
-
-## GitHub
-
-GitHub Projects is not required. Use a milestone for each active product milestone and, when tracking is useful, one issue for each active technical Epic. The issue links to the Epic, active plan, and implementation pull requests.
-
-Create additional issues only for independently assigned work, unplanned defects, or decisions that need discussion outside the plan. Implementation tasks and checkpoints remain in the plan.
 
 For the repository cutover, see [Development documentation migration](development-documentation-migration.md).

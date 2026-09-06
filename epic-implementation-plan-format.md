@@ -2,11 +2,11 @@
 
 Status: Proposed for review
 
-This document defines the plan an agent uses to implement one technical Epic.
+This document defines the format used by each implementation plan for a technical Epic.
 
 ## Recommendation
 
-Use the Epic as the specification and one living implementation plan as the execution artifact. Do not adopt OpenSpec or GitHub Spec Kit by default. Their proposal, specification, design, and task files would duplicate information already present in the Epic and plan.
+Use the Epic as the specification and one or more living implementation plans as its execution artifacts. Do not adopt OpenSpec or GitHub Spec Kit by default. Their proposal, specification, design, and task files would duplicate information already present in the Epic and plans.
 
 This remains spec-driven development:
 
@@ -22,7 +22,7 @@ The plan format follows the useful parts of [OpenAI ExecPlans](https://developer
 
 ## Artifact boundary
 
-The Epic defines what must be true. The plan defines how to make it true.
+The Epic defines what must be true. Each plan defines how to complete one scoped part of that outcome.
 
 | Epic | Implementation plan |
 | --- | --- |
@@ -36,11 +36,11 @@ Do not restate the complete Epic in the plan. Link to it and include only the co
 
 ## Plan lifecycle
 
-The assigned agent creates the plan immediately before implementation. The plan remains canonical until the Epic passes its acceptance criteria.
+The owner creates a plan immediately before its workstream starts. The plan remains canonical for that scope until its acceptance criteria pass.
 
-Every agent that continues the Epic updates the same plan. Worker agents report changes and evidence to the plan owner rather than creating competing plans.
+Several plans may be active under one Epic. Each has one owner, covers a distinct scope, and links to dependent plans. Agents continuing that scope update the same plan rather than creating a competing plan.
 
-After completion, move durable facts into the Epic, a shared specification, code, tests, or a separate decision record. Remove the completed plan from the active directory. Git history and pull requests preserve its execution history.
+After a plan is complete, move durable facts into the Epic, a shared specification, code, tests, or a separate decision record. Delete the completed plan from the repository. Git history and pull requests preserve its execution history.
 
 ## Required sections
 
@@ -127,7 +127,7 @@ One checkpoint may produce one or more pull requests. Pull-request boundaries fo
 
 ## When a plan is too large
 
-Split the technical Epic when the plan needs separate owners, independent plans, unrelated review domains, or many checkpoints that can be accepted separately. Do not add child plans beneath a large Epic. Promote the independent outcomes to separate technical Epics under the same roadmap milestone.
+Split a plan when distinct workstreams need separate owners but still contribute to one technical outcome. Split the technical Epic when the outcomes can be accepted independently or no longer form one coherent result.
 
 ## Optional tooling
 
