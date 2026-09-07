@@ -3,8 +3,6 @@
 | Tracking | Value |
 | --- | --- |
 | Status | Accepted |
-| Source | [E1-03 task at the migration revision](https://github.com/RostrumAI/rostrum/blob/4da89f6316abd44f6ef499a27b87c60aca35e610/docs/tasks/epic-01/e1-03-write-workflow-interface-v1-specification.md) |
-| Decisions | [E1-S1](../decisions/m1/e1-s1-workflow-interface-v1.md), [E1-S2](../decisions/m1/e1-s2-validation-behavior.md), [E1-S3](../decisions/m1/e1-s3-draft-publication-lifecycle.md), [E1-S4](../decisions/m1/e1-s4-interface-versioning-methodology.md) |
 | Machine-readable schema source | [`packages/workflow/src/schema.ts`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/src/schema.ts) |
 | Last updated | 2026-08-28 |
 
