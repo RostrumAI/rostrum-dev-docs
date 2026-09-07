@@ -26,7 +26,6 @@ rostrum-dev-docs/
     product-strategy.md
     product-roadmap.md
   epics/
-    m1/
     m2/
     m3/
   plans/
@@ -70,12 +69,6 @@ The human-readable `docs/specs/workflow-interface-v1.md` moves to `rostrum-dev-d
 
 ## Rework current planning
 
-### M1: Shape of a workflow
-
-Treat the current Epic 1 as completed roadmap milestone M1. Retain its durable specification and decisions. Do not recreate its completed task files as plans.
-
-Move the unfinished authoring lifecycle integration test into a small M1 hardening Epic. Keep authoring guidance assigned to the later authoring milestone.
-
 ### M2: Local workflow execution
 
 Replace the current broad Epic 2 with roadmap milestone M2 and six technical Epics:
@@ -105,7 +98,7 @@ Keep these product goals in the roadmap. Do not create placeholder Epics or plan
 
 1. Approve the methodology, plan format, and repository boundary.
 2. Copy the selected documents at one revision and create the destination structure.
-3. Rework M1, M2, and M3 as described above.
+3. Rework M2 and M3 as described above.
 4. Add link and Markdown checks to `rostrum-dev-docs`.
 5. Update repository links and replace the agent documentation with the minimal `AGENTS.md`.
 6. Remove the migrated documents, `agent-guides/`, and `.agents/` from `rostrum` in one cleanup pull request.

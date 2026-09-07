@@ -92,11 +92,8 @@ E2.3 creates the first runtime, daemon, API, conformance, and end-to-end path. E
 | E2-09 and its conformance and demonstration work | E2.6 |
 | E2-01 | E2.1 prerequisite or maintenance pull request |
 | E2-02 | Closed when this methodology and migration are approved |
-| E2-13 | M1 authoring hardening, outside M2 |
 
 ## Other roadmap work
-
-Epic 1 becomes completed roadmap milestone M1. Keep its durable specification and decisions, but do not recreate completed task files as active planning documents.
 
 The current Epic 3 becomes roadmap milestone M3. Split it into technical Epics only when M2 contracts are stable and M3 is ready for implementation.
 

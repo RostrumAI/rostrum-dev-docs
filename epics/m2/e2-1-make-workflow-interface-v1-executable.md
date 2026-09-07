@@ -4,7 +4,7 @@ Status: Planned
 
 Roadmap milestone: [M2: Local workflow execution](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: M1 workflow interface, validator, publication lifecycle, and immutable published versions
+Depends on: [Workflow interface v1](../../specifications/workflow-interface-v1.md), its validator, publication lifecycle, and immutable published versions
 
 ## Outcome
 

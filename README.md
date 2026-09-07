@@ -29,7 +29,6 @@ See [Epic delivery methodology](epic-delivery-methodology.md) and [Epic implemen
 
 ### Technical Epics
 
-- [E1.1: Prove the authoring lifecycle through the real service](epics/m1/e1-1-authoring-lifecycle-integration.md)
 - [E2.1: Make workflow interface v1 executable](epics/m2/e2-1-make-workflow-interface-v1-executable.md)
 - [E2.2: Establish the local daemon boundary](epics/m2/e2-2-establish-local-daemon-boundary.md)
 - [E2.3: Execute sequential workflows](epics/m2/e2-3-execute-sequential-workflows.md)
@@ -37,7 +36,7 @@ See [Epic delivery methodology](epic-delivery-methodology.md) and [Epic implemen
 - [E2.5: Execute parallel paths and joins](epics/m2/e2-5-execute-parallel-paths-and-joins.md)
 - [E2.6: Execute bounded loops](epics/m2/e2-6-execute-bounded-loops.md)
 
-M1 is complete except for E1.1 hardening. M2 is the active roadmap milestone. M3 remains a roadmap milestone until M2 contracts stabilize.
+M2 is the active roadmap milestone. M3 remains a roadmap milestone until M2 contracts stabilize.
 
 ### Specifications
 

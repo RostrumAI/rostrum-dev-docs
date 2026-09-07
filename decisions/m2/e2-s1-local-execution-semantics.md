@@ -27,7 +27,7 @@ The runtime enforces these execution rules:
 
 ## Context
 
-Epic 01 defines the shape and validation of a workflow document, but it does not specify how a workflow executes. E2-S1 defines the execution semantics for in-memory execution in the local daemon before E2-07 through E2-09 implement the executor and E2-10 adds the Control API run operations.
+Workflow interface v1 defines the shape and validation of a workflow document, but it does not specify how a workflow executes. E2-S1 defines the execution semantics for in-memory execution in the local daemon before E2-07 through E2-09 implement the executor and E2-10 adds the Control API run operations.
 
 The execution model must satisfy four requirements:
 

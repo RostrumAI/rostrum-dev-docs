@@ -66,7 +66,6 @@ The roadmap orders observable product states. Technical Epic files are created o
 
 | Milestone | Product state | Technical delivery | Exit demonstration |
 | --- | --- | --- | --- |
-| M1 | The shape of a workflow is defined and validatable | Complete. [Workflow interface v1](../specifications/workflow-interface-v1.md) and [M1 decisions](../decisions/m1/). [E1.1](../epics/m1/e1-1-authoring-lifecycle-integration.md) is follow-up hardening. | A human or AI saves incomplete workflow JSON as a draft, revises it from validation findings, publishes a valid revision, and retrieves its immutable version and digest. |
 | M2 | A workflow can execute locally | [E2.1](../epics/m2/e2-1-make-workflow-interface-v1-executable.md), [E2.2](../epics/m2/e2-2-establish-local-daemon-boundary.md), [E2.3](../epics/m2/e2-3-execute-sequential-workflows.md), [E2.4](../epics/m2/e2-4-execute-conditional-workflows.md), [E2.5](../epics/m2/e2-5-execute-parallel-paths-and-joins.md), and [E2.6](../epics/m2/e2-6-execute-bounded-loops.md) | A caller invokes an exact published workflow version through the Control API, disconnects, and later retrieves its progress, output, or failures after the local daemon executes every workflow interface v1 control-flow construct. |
 | M3 | A run can survive, wait, and be inspected | Define technical Epics after M2 stabilizes the execution, handler, daemon, and Control API contracts. | A run survives restart and reconnect, exposes events and artifacts, retries bounded failures, and pauses and resumes around a human decision. |
 | M4 | A workflow can safely run tools and scripts | Roadmap only | A workflow runs built-in tools and a container-defined script in Docker, applies policy, and binds captured results into downstream nodes without losing durable evidence. |
@@ -79,7 +78,7 @@ The roadmap orders observable product states. Technical Epic files are created o
 | M11 | Teams can co-author workflows | Roadmap only | Multiple authors create revisions, avoid silent overwrites, compare and merge changes, review in Rostrum or Git, and publish the approved revision. |
 | M12 | The workflow CLI and showcase suite prove product breadth | Roadmap only | The CLI exercises the stable workflow and Control API contracts, and every showcase passes through the same public workflow, execution, policy, evidence, and client contracts on self-hosted Docker. |
 | M13 | Rostrum can be operated as Cloud | Roadmap only | The same workflow JSON and Control API operate across tenants with managed identity, credentials, quotas, billing, operations, and microVM isolation. |
-| Final | Rostrum matches the finalized product state | M1 through M13, in order | A team can define, simulate, operate, integrate, co-author, and govern workflows; run every node type durably across supported isolation targets; inspect complete evidence; and reproduce the showcase suite locally, self-hosted, and in Rostrum Cloud. |
+| Final | Rostrum matches the finalized product state | M2 through M13, in order | A team can define, simulate, operate, integrate, co-author, and govern workflows; run every node type durably across supported isolation targets; inspect complete evidence; and reproduce the showcase suite locally, self-hosted, and in Rostrum Cloud. |
 
 ## 4. Showcase suite
 
@@ -87,7 +86,7 @@ The roadmap orders observable product states. Technical Epic files are created o
 | --- | --- | --- |
 | Product discovery brief | Read-only context retrieval with provenance, model synthesis, human revision and approval, and artifact lineage from evidence to product decisions | M5, M6, M8, M10 |
 | Roadmap prioritization and release plan | Container-defined scoring, typed script output, fan-out and joins, scenario comparison, durable approval waits, and reusable mocks | M3, M4, M7, M8 |
-| AI-authored Rostrum workflow | An AI agent can create portable workflow JSON that the shared contract validates before visual review and simulation | M1, M7, M8, M11, M12 |
+| AI-authored Rostrum workflow | An AI agent can create portable workflow JSON that the shared contract validates before visual review and simulation | M7, M8, M11, M12 |
 | Secure note-taking application delivery | Model and deterministic nodes coordinate isolated implementation, Git review, independent verification, deployment, approval, and rollback | M4, M5, M12 |
 | Incident investigation and governed remediation | External triggers, read-only context, controlled write actions, durable approval, retry, rollback, and escalation remain separate and observable | M3, M4, M6, M10 |
 | Cross-system data reconciliation | Deterministic scripts, typed piping, idempotency, parallel comparison, joins, exception review, and structured publishing work without model nodes | M3, M4, M10, M12 |

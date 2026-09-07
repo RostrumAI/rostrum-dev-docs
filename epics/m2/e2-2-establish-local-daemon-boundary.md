@@ -4,7 +4,7 @@ Status: Planned
 
 Roadmap milestone: [M2: Local workflow execution](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: M1 standalone Control API process
+Depends on: Standalone Control API process
 
 ## Outcome
 
