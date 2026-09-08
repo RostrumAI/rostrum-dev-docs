@@ -29,12 +29,12 @@ See [Epic delivery methodology](epic-delivery-methodology.md) and [Epic implemen
 
 ### Technical Epics
 
-- [E2.1: Make workflow interface v1 executable](epics/m2/e2-1-make-workflow-interface-v1-executable.md)
-- [E2.2: Establish the local daemon boundary](epics/m2/e2-2-establish-local-daemon-boundary.md)
-- [E2.3: Execute sequential workflows](epics/m2/e2-3-execute-sequential-workflows.md)
-- [E2.4: Execute conditional workflows](epics/m2/e2-4-execute-conditional-workflows.md)
-- [E2.5: Execute parallel paths and joins](epics/m2/e2-5-execute-parallel-paths-and-joins.md)
-- [E2.6: Execute bounded loops](epics/m2/e2-6-execute-bounded-loops.md)
+- [E2.1: Establish the daemon network boundary](epics/m2/e2-1-establish-daemon-network-boundary.md)
+- [E2.2: Execute sequential workflows](epics/m2/e2-2-execute-sequential-workflows.md)
+- [E2.3: Execute conditional workflows](epics/m2/e2-3-execute-conditional-workflows.md)
+- [E2.4: Execute parallel paths and joins](epics/m2/e2-4-execute-parallel-paths-and-joins.md)
+- [E2.5: Execute bounded loops](epics/m2/e2-5-execute-bounded-loops.md)
+- [E2.6: Complete M2 conformance](epics/m2/e2-6-complete-m2-conformance.md)
 
 M2 is the active roadmap milestone. M3 remains a roadmap milestone until M2 contracts stabilize.
 

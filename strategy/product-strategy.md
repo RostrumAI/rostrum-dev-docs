@@ -173,7 +173,7 @@ The Control API is the product contract between the Rostrum daemon, control clie
 - managing context sources, context policies, and context provenance;
 - receiving external events and reporting outcomes.
 
-For local and self-hosted use, the Control API is served by or alongside the local Rostrum daemon. For hosted use, the same contract is implemented by the tenant-aware control plane and routes work to remote execution infrastructure. The daemon is responsible for execution; the API is responsible for the contracts and commands that govern it.
+For local and self-hosted use, the Control API and daemon may share a host or run on different machines. They communicate through a private, authenticated service boundary and do not require shared process memory, files, or direct database access. For hosted use, the same Control API contract is implemented by the tenant-aware control plane and routes work to remote execution infrastructure. The daemon is responsible for execution; the API is responsible for the contracts and commands that govern it.
 
 ### 4.9 Control clients
 
@@ -265,7 +265,7 @@ flowchart LR
     C --> U
 ```
 
-The important architectural rule is the separation of three top-level components: the Rostrum daemon executes workflows; the Control API defines the contracts, authorization, approvals, and observation/control operations; and control clients provide interfaces over that API. The web application, desktop application, mobile-responsive views, CLI, SDK, and integrations use the same authoritative records. A run must continue if a client disconnects, and the daemon must never require a client process to remain alive.
+The important architectural rule is the separation of three top-level components: the Rostrum daemon executes workflows; the Control API defines the contracts, authorization, approvals, and observation and control operations; and control clients provide interfaces over that API. The Control API and daemon may run on the same host or different machines and communicate only through their private service boundary. The web application, desktop application, mobile-responsive views, CLI, SDK, and integrations use the same authoritative records. A run must continue if a client disconnects, and the daemon must never require a client process to remain alive.
 
 ## 6. Open-source and cloud boundary
 
