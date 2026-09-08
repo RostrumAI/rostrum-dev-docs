@@ -36,6 +36,16 @@ An Epic is the right size when:
 
 An Epic may have several plans when separate owners can work on distinct parts of the same technical outcome. Each plan must have a clear scope and owner, and plans must link any dependencies between them. Split the Epic when its outcomes can be accepted independently or no longer form one coherent result.
 
+## Writing an Epic
+
+Write for an engineer who knows the product but has not designed this subsystem. Name the behavior and the decisions the Epic must settle. For example, replace "define invocation validation" with the workflow identity, required inputs, supported step types, and rejection behavior that must be specified. Introduce code field names alongside their meaning.
+
+Keep requirements at the level of an engineering outcome. Configurable network listeners are an Epic requirement; calling a particular listen function belongs in an implementation plan. Each execution Epic includes a concrete workflow with named steps, inputs, expected output, and failure cases. Acceptance checks those outcomes rather than asking only for a "reviewed contract."
+
+Distinguish existing rules from proposals. Link the current specification, identify which rules must change, and state where unresolved decisions will be recorded before dependent code is written. Review requirements belong in the plan's ownership and risk sections, not as repeated approval gates with no defined artifact.
+
+The Epic introducing a behavior owns focused verification of that behavior. A dedicated testing Epic may own shared examples, test infrastructure, and full-system checks without making earlier Epics responsible for building that infrastructure independently.
+
 ## Plans and checkpoints
 
 An implementation plan can span several agent sessions and pull requests. Checkpoints are sections inside the plan, not separate documents or tracker objects.
@@ -70,14 +80,14 @@ M2 is delivered through these technical Epics:
 
 | Epic | Technical outcome | Independent acceptance |
 | --- | --- | --- |
-| E2.1: Establish the daemon network boundary | Let the Control API and one daemon communicate over a private, authenticated HTTP boundary without requiring the same process, filesystem, database, or host | The real services communicate from separate containers or network namespaces, reject unauthenticated requests, report health, and stop independently |
-| E2.2: Execute sequential workflows | Define the run, handler, binding, result, and failure rules while building the first working execution path | A caller starts a sequential run, disconnects, and later retrieves its result or failures |
-| E2.3: Execute conditional workflows | Define and implement condition evaluation, branch selection, and unselected-path state | Both branch outcomes work through the real Control API and daemon, and unselected work does not run |
-| E2.4: Execute parallel paths and joins | Define and implement bounded concurrency, matching joins, fair scheduling, handler drain, and stable failures | Worker capacity and completion order do not change the joined result or ordered failures |
-| E2.5: Execute bounded loops | Define and implement ordered iterations, bounds, loop variables, failure policies, and parallel work inside an iteration | Loop behavior passes through every supported execution boundary |
-| E2.6: Complete M2 conformance | Run one fixture catalog through each layer that implements the behavior and prove M2 with real processes | The workflow package, runtime, daemon HTTP API, and Control API agree, and one command proves local execution |
+| E2.1: Establish the daemon network boundary | Run independently configured Control API and daemon services over private authenticated HTTP, with both using the same Postgres database through `packages/database`; move backend services to `apis/` | Focused service checks prove authenticated requests, readiness, errors, and independent shutdown; E2.6 owns the automated separate-network environment |
+| E2.2: Execute sequential workflows | Specify the supported deterministic steps, request checks, execution state, data bindings, handler responses, and final result while implementing sequential execution | A named sequential workflow returns the expected output after the caller disconnects; invalid requests create no run and execution errors prevent success |
+| E2.3: Execute conditional workflows | Specify operator types and branch priority, select one destination, and distinguish unselected work from failures | A concrete workflow exercises each destination, boundary values, and invalid comparisons without running unselected steps |
+| E2.4: Execute parallel paths and joins | Execute bounded parallel work, wait for matching successful paths, share capacity across runs, and stop and settle failed work within its execution scope | A concrete workflow produces the expected joined output at different capacities and reports observed failures in stable order |
+| E2.5: Execute bounded loops | Specify ordered iteration results and workflow-configured error policies, including parallel work inside an iteration | A concrete collection produces ordered results; fail-fast stops later iterations and error tolerance captures eligible iteration failures and continues |
+| E2.6: Complete M2 conformance | Define the testing strategy, shared example catalog, layer responsibilities, and real-service environment | One command proves all M2 constructs, shared-database and authenticated network access, client disconnect, and cleanup |
 
-The Epics introduce contracts with the behavior that uses them. E2.2 defines only the shared run, handler, binding, result, and failure rules needed for sequential execution. E2.3 through E2.5 update the workflow specification, types, validator, schemas, fixtures, and daemon together for each control-flow construct. E2.6 checks the finished system rather than introducing another interpretation of workflow behavior.
+The Epics introduce rules with the behavior that uses them. E2.2 defines the shared run, handler, binding, result, and failure rules needed for sequential execution. E2.3 through E2.5 update the workflow specification, types, validator, schemas, example workflows, and daemon together for each control-flow construct. An error captured by a configured loop policy is an iteration result, not automatically a failed run. E2.4's handling of parallel failures must support that distinction. E2.6 compares the finished implementations and owns reusable testing infrastructure rather than introducing another interpretation of workflow behavior.
 
 ### Current work mapping
 

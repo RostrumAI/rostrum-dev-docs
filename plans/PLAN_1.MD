@@ -32,7 +32,7 @@ Apply one clean rename across code, storage, fixtures, generated artifacts, test
 - Remove the Control API service-version endpoint. Do not add one to the daemon.
 - Remove service, engine, platform, and execution versions from product contracts.
 - Remove `/v1` from Control API paths until the public API is deliberately stabilized. Keep routes under `/api`.
-- E2.1 establishes separate-host deployment for one Control API and one daemon. Compatibility across independently upgraded releases remains later work.
+- E2.1 establishes separate-host deployment for one Control API and one daemon, both using the same Postgres database through `packages/database`. It also moves backend services from `apps/` to `apis/`, retaining `apps/` for user-facing clients. Compatibility across independently upgraded releases remains later work.
 
 ## Progress
 
@@ -65,7 +65,7 @@ Primary areas:
 
 - `packages/workflow/src/`, including its fixtures and tests.
 - `packages/database/migrations/` and `packages/database/src/`.
-- `apps/control-api/src/`, its smoke script, and `openapi.json`.
+- `apis/control-api/src/`, its smoke script, and `openapi.json` after E2.1's directory cutover. The current checkout still uses `apps/control-api/src/`; E2.1 owns that move, not this naming workstream.
 - Implementation README files and the durable documents linked above.
 
 Use language-server renames for exported TypeScript symbols. Regenerate checked-in artifacts from their source.
@@ -94,7 +94,7 @@ Also run Markdown lint and `node scripts/check-links.mjs` in `rostrum-dev-docs`.
 
 - Reduced model approved with the name `workflowFormatVersion`.
 - Revision IDs remain for authoring; publication numbers remain the execution-facing handle.
-- E2.1 owns separate-host deployment for one Control API and one daemon; independent-upgrade compatibility remains a later design topic.
+- E2.1 owns separate-host deployment, shared-database access, and the backend-service move to `apis/`; independent-upgrade compatibility remains a later design topic.
 
 ## Outcome
 

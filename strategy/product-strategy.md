@@ -173,7 +173,7 @@ The Control API is the product contract between the Rostrum daemon, control clie
 - managing context sources, context policies, and context provenance;
 - receiving external events and reporting outcomes.
 
-For local and self-hosted use, the Control API and daemon may share a host or run on different machines. They communicate through a private, authenticated service boundary and do not require shared process memory, files, or direct database access. For hosted use, the same Control API contract is implemented by the tenant-aware control plane and routes work to remote execution infrastructure. The daemon is responsible for execution; the API is responsible for the contracts and commands that govern it.
+For local and self-hosted use, the Control API and daemon may share a host or run on different machines. The Control API sends service commands and retrieves live run state through the daemon's private, authenticated HTTP API. Both services independently access the same Postgres database using shared types and access code in `packages/database`; they do not share process memory or application files. The daemon owns execution, including M2's in-memory run state. Sharing a database does not bring durable run checkpoints or restart recovery forward from M3. For hosted use, the same caller-facing Control API contract is implemented by the tenant-aware control plane and routes work to remote execution infrastructure.
 
 ### 4.9 Control clients
 
