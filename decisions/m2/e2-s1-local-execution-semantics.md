@@ -16,7 +16,7 @@ In this document, a committed output is an output that has passed validation and
 
 The proposed execution rules are:
 
-1. **Exact invocation inputs:** To start a run, the caller selects an exact publication using `workflowId` and `publicationNumber` and supplies every required input defined in `workflow.inputs`. The engine rejects requests that miss required inputs or include undeclared inputs before creating a run. Publication naming follows the agreed version-model plan; it does not introduce a separate execution version.
+1. **Exact invocation inputs:** To start a run, the caller selects an exact publication using `workflowId` and `publicationNumber` and supplies every required input defined in `workflow.inputs`. The engine rejects requests that miss required inputs or include undeclared inputs before creating a run. Publication naming follows the execution-facing publication contract; it does not introduce a separate execution version.
 2. **Explicit result steps for workflow completion:** A workflow finishes successfully only when execution reaches an explicit `result` step. Step handlers and conditional branches cannot finish a workflow implicitly. Resolve the result step's `inputs` using ordinary literal and reference bindings; that resolved object is the final payload. The current interface has no top-level workflow output schema.
 3. **Engine-evaluated conditionals:** The execution engine evaluates conditional rules and selects which branch to execute based on step outputs. Step handlers only execute their own unit of work and return data; handlers never make routing decisions or return branch names.
 4. **Fan-out paths with a required join:** When a workflow splits into parallel paths, every path must reach one matching fan-in step. A path may contain a sequence of steps or a nested fan-out that rejoins before the outer fan-in. While a fan-out remains open, its paths cannot cross, end early, or contain a conditional. The matching fan-in can end the workflow as a `result` step or continue to another step. A conditional after the join must be a separate successor step.
@@ -240,7 +240,7 @@ The dependency array defines the readiness rule; the countdown is its runtime in
 
 The Control API provides a read-only projection of the in-memory execution state. E2.2 proposes internal `stopping` as a drain state, projected as public `running` until all active handlers settle; the public status then becomes `failed`. The lifecycle tables above describe internal states, not an additional public status.
 
-The proposed API below uses the agreed `publicationNumber` naming from E2.2's version-model plan. That plan retains `workflowFormatVersion` for document compatibility and removes separate service and execution versions. It owns the pending code and storage rename. Step labels below are readable aliases for step IDs.
+The proposed API below uses `publicationNumber` for the execution-facing publication identity. Document compatibility remains governed by the workflow interface specification; no separate execution version is introduced. Step labels below are readable aliases for step IDs.
 
 ```json
 {
