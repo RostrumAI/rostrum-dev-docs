@@ -16,12 +16,12 @@ Sequential execution describes the order of steps within one run. It does not li
 
 ### Starting an independent run
 
-- Select one exact publication using `workflowId` and `publicationNumber`, as agreed in [the version-model plan](../../plans/PLAN_1.MD). Later edits or publications cannot change an accepted run.
+- Select one exact publication using `workflowId` and `publicationNumber`. Later edits or publications cannot change an accepted run.
 - Check that the publication exists, its stored content passes the integrity check, the daemon supports its declared behavior, and invocation inputs satisfy the workflow's declared requirements. Unsupported steps, invalid configuration, or invalid inputs reject the request before a run is created.
 - Retrieve the publication from the shared Postgres database through `packages/database`. The daemon owns execution and live run state; HTTP carries invocation commands and run observation between the services.
 - Give each accepted invocation a stable run ID. Multiple runs may remain in progress together, including runs of the same publication. One run's inputs, failures, or client disconnect must not affect another run.
 
-The version-model plan retains `workflowFormatVersion` for the workflow document's validation and execution rules. It removes separate service, engine, platform, and execution versions. Callers select a publication, not a runtime version. This Epic uses the agreed terminology; the plan owns the pending code and storage rename.
+Callers select a publication, not a runtime version. This Epic uses publication terminology and treats the selected publication as immutable for the run.
 
 ### Understanding execution progress
 
