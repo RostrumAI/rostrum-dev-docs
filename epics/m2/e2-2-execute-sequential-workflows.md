@@ -4,7 +4,7 @@ Status: Planned
 
 Roadmap milestone: [M2: Local workflow execution](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E2.1](e2-1-establish-daemon-network-boundary.md), [Workflow interface v1](../../specifications/workflow-interface-v1.md), its validator, and immutable published workflow definitions
+Depends on: [E2.1](e2-1-establish-daemon-network-boundary.md), [Workflow format v1](../../specifications/workflow-interface-v1.md), its validator, and immutable publications
 
 ## Outcome
 
@@ -16,7 +16,7 @@ This Epic defines and implements invocation checks, run and step state, input bi
 
 The Control API and daemon independently connect to the same Postgres database through `packages/database`. The daemon retrieves the requested immutable publication from that shared store and verifies it before execution; it does not require an API-owned database copy or workflow file transfer. HTTP carries invocation commands and live run state between the services. Shared publication storage does not make the in-memory run state persistent.
 
-[Workflow interface v1](../../specifications/workflow-interface-v1.md) is the accepted document contract. [E2-S1](../../decisions/m2/e2-s1-local-execution-semantics.md) is a proposal, not an approved or implemented runtime contract. The requirements below identify the behavior to deliver and the proposal conflicts to resolve. [PLAN_1](../../plans/PLAN_1.MD) records a future naming cutover to `workflowFormatVersion`, `publicationNumber`, and `/api` paths. Those names and paths must not be described as already deployed. Invocation must identify one exact publication under whichever contract is implemented, never "latest."
+[Workflow format v1](../../specifications/workflow-interface-v1.md) is the accepted document contract. [E2-S1](../../decisions/m2/e2-s1-local-execution-semantics.md) is a proposal, not an approved or implemented runtime contract. The requirements below identify the behavior to deliver and the proposal conflicts to resolve. [PLAN_1](../../plans/PLAN_1.MD) records the completed naming cutover to `workflowFormatVersion`, `publicationNumber`, and `/api` paths. Invocation must identify one exact publication under that contract, never "latest."
 
 ### Invocation checks
 

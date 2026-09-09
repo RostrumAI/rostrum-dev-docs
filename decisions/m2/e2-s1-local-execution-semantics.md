@@ -16,7 +16,7 @@ In this document, a committed output is an output that has passed validation and
 
 The proposed execution rules are:
 
-1. **Exact invocation inputs:** To start a run, the caller must request an exact published workflow version and supply every required input defined in `workflow.inputs`. The engine rejects requests that miss required inputs or include undeclared inputs before creating a run.
+1. **Exact invocation inputs:** To start a run, the caller must request an exact publication and supply every required input defined in `workflow.inputs`. The engine rejects requests that miss required inputs or include undeclared inputs before creating a run.
 2. **Explicit result steps for workflow completion:** A workflow finishes successfully only when execution reaches an explicit `result` step. Step handlers and conditional branches cannot finish a workflow implicitly. Resolve the result step's `inputs` using ordinary literal and reference bindings; that resolved object is the final payload. The current interface has no top-level workflow output schema.
 3. **Engine-evaluated conditionals:** The execution engine evaluates conditional rules and selects which branch to execute based on step outputs. Step handlers only execute their own unit of work and return data; handlers never make routing decisions or return branch names.
 4. **Fan-out paths with a required join:** When a workflow splits into parallel paths, every path must reach one matching fan-in step. A path may contain a sequence of steps or a nested fan-out that rejoins before the outer fan-in. While a fan-out remains open, its paths cannot cross, end early, or contain a conditional. The matching fan-in can end the workflow as a `result` step or continue to another step. A conditional after the join must be a separate successor step.
@@ -29,7 +29,7 @@ The proposed execution rules are:
 
 ## Context
 
-Workflow interface v1 defines the shape and validation of a workflow document, but it does not fully specify runtime behavior. This proposal is input to E2.2 through E2.5. Each Epic resolves and implements the part of the contract needed for its execution path.
+Workflow format v1 defines the shape and validation of a workflow document, but it does not fully specify runtime behavior. This proposal is input to E2.2 through E2.5. Each Epic resolves and implements the part of the contract needed for its execution path.
 
 The execution model must satisfy four requirements:
 
@@ -96,8 +96,8 @@ The run state transitions define the top-level execution lifecycle for a workflo
 
 | Current state | Event / Trigger | Guard | Next state | Effect / Output |
 | --- | --- | --- | --- | --- |
-| `[None]` | Invocation request | The exact published workflow version exists, input keys match `workflow.inputs` exactly, and all required step handlers are registered | `queued` | Allocates a run ID, initializes execution tracking and remaining-dependency counters, and enqueues the `firstNode` step. |
-| `[None]` | Invocation request | Unknown workflow version, missing input, undeclared input, or unregistered step type | `[Rejected]` | Rejects the request with a structured error. No run is created. |
+| `[None]` | Invocation request | The exact publication exists, input keys match `workflow.inputs` exactly, and all required step handlers are registered | `queued` | Allocates a run ID, initializes execution tracking and remaining-dependency counters, and enqueues the `firstNode` step. |
+| `[None]` | Invocation request | Unknown workflow publication, missing input, undeclared input, or unregistered step type | `[Rejected]` | Rejects the request with a structured error. No run is created. |
 | `queued` | Scheduler start turn | The run has not started yet | `running` | Activates the `firstNode` step, moves the step instance to `ready`, and updates `currentSteps`. |
 | `running` | Dispatch step | A worker slot is available, a step instance is `ready`, and its execution scope is not draining after an error | `running` | Moves the step instance to `running`, starts the step handler, and updates `currentSteps`. |
 | `running` | Step handler success | Output matches the exact schema, the execution scope is not draining, and the step routes to a successor | `running` | Records step outputs, evaluates successors or conditionals, activates reached steps, updates dependencies, and updates `currentSteps`. |
@@ -130,11 +130,11 @@ The engine validates invocation requests synchronously before creating a run.
 
 | Condition | Verification rule | Response / Outcome |
 | --- | --- | --- |
-| Workflow version | Must match an exact, immutable published workflow version | If not found, rejects with `run.invocation.workflow-not-found` (HTTP 404). |
+| Publication | Must match an exact, immutable publication | If not found, rejects with `run.invocation.workflow-not-found` (HTTP 404). |
 | Missing input | Every input defined in `workflow.inputs` must be provided | If any are missing, rejects with `run.input.missing` (HTTP 400). |
 | Undeclared input | Invocation inputs must not contain extra fields outside `workflow.inputs` | If extra fields are present, rejects with `run.input.unknown` (HTTP 400). |
 | Input data types | Invocation input values must match their declared JSON Schema types | If any types mismatch, rejects with `run.input.type` (HTTP 400). |
-| Step handler availability | Every step type used in the workflow must be registered in the daemon for the declared interface version | If any handler is missing, rejects with `run.step.unsupported` (HTTP 400). |
+| Step handler availability | Every step type used in the workflow must be registered in the daemon for the declared workflow format version | If any handler is missing, rejects with `run.step.unsupported` (HTTP 400). |
 | Valid request | Passes all checks above | Accepts request with HTTP 201; returns the run identity, exact publication identity, `status: "queued"`, `currentSteps: []`, `output: null`, and `failures: []`. |
 
 ## Handler contracts and output validation
@@ -240,13 +240,13 @@ The dependency array defines the readiness rule; the countdown is its runtime in
 
 The Control API provides a read-only projection of the in-memory execution state. E2.2 proposes internal `stopping` as a drain state, projected as public `running` until all active handlers settle; the public status then becomes `failed`. The lifecycle tables above describe internal states, not an additional public status.
 
-The example uses the current publication-number field, `versionNumber`. E2.2's active naming plan will change it to `publicationNumber`; a semantic version such as `"1.0.0"` is not the publication identity. Step labels below are readable aliases for step IDs.
+A semantic version such as `"1.0.0"` is not the publication identity. Step labels below are readable aliases for step IDs.
 
 ```json
 {
   "runId": "01918a32-7f2c-7b90-9c21-4f2834b6e100",
   "workflowId": "01918a30-2b11-7a00-88f1-102938475600",
-  "versionNumber": 1,
+  "publicationNumber": 1,
   "status": "running",
   "currentSteps": [
     {
@@ -283,7 +283,7 @@ The example uses the current publication-number field, `versionNumber`. E2.2's a
 
 ## M2 workflow contract changes
 
-These proposed semantics require changes to the current workflow interface. They do not replace accepted rules by publication of this decision record. The owning Epic must resolve specification versioning, update types, schemas and validation, and implement the matching runtime behavior:
+These proposed semantics require changes to the current workflow format. They do not replace accepted rules by publication of this decision record. The owning Epic must resolve specification versioning, update types, schemas and validation, and implement the matching runtime behavior:
 
 | Area | Current workflow rule | Proposed E2-S1 execution rule | Owning Epic |
 | --- | --- | --- | --- |

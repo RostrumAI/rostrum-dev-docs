@@ -14,7 +14,7 @@ The daemon evaluates declared conditions against validated step outputs, execute
 
 This Epic specifies operator types, boolean groups, branch priorities, branch destinations, conditional completion, and unselected-step state. It implements those rules in workflow validation and daemon execution, using E2.2's invocation, binding, handler, result, and public failure contracts.
 
-[Workflow interface v1](../../specifications/workflow-interface-v1.md) already lists the operators, requires a default, selects the lowest-numbered matching priority, and permits a branch without `next` to end the workflow. It does not fully define operator value semantics. [E2-S1](../../decisions/m2/e2-s1-local-execution-semantics.md) proposes unique priorities and an explicit `next` on every branch, with an eventual `result` step on every path. E2-S1 remains proposed. The operator policy below is a concrete candidate for the missing semantics, not a claim that these choices are already approved or implemented.
+[Workflow format v1](../../specifications/workflow-interface-v1.md) already lists the operators, requires a default, selects the lowest-numbered matching priority, and permits a branch without `next` to end the workflow. It does not fully define operator value semantics. [E2-S1](../../decisions/m2/e2-s1-local-execution-semantics.md) proposes unique priorities and an explicit `next` on every branch, with an eventual `result` step on every path. E2-S1 remains proposed. The operator policy below is a concrete candidate for the missing semantics, not a claim that these choices are already approved or implemented.
 
 ### Operator value rules to specify
 

@@ -36,12 +36,12 @@ Apply one clean rename across code, storage, fixtures, generated artifacts, test
 
 ## Progress
 
-- [ ] Resolve storage migration treatment.
-- [ ] Rename the workflow format contract.
-- [ ] Rename publication storage and APIs.
-- [ ] Remove service-version endpoints and `/api/v1` paths.
-- [ ] Update fixtures, generated artifacts, tests, and documentation.
-- [ ] Run focused verification.
+- [x] Resolve storage migration treatment.
+- [x] Rename the workflow format contract.
+- [x] Rename publication storage and APIs.
+- [x] Remove service-version endpoints and `/api/v1` paths.
+- [x] Update fixtures, generated artifacts, tests, and documentation.
+- [x] Run focused verification.
 
 ## Checkpoints
 
@@ -98,4 +98,4 @@ Also run Markdown lint and `node scripts/check-links.mjs` in `rostrum-dev-docs`.
 
 ## Outcome
 
-Not started. Record implementation evidence and remaining gaps here when work resumes.
+Completed in the `feat/plan1-simplify-version-model` worktree. Storage treatment is additive migration `005_publications` (renames `published_versions` to `publications` with new column names in place; pre-release development databases carry no durable data, so no revision-history rewrite). Workflow format contract renamed (`workflowFormatVersion`, `WorkflowFormatRuleSet`, `WorkflowFormatRegistry`, `FormatStage`, `workflow.format.*` findings); publication storage and APIs renamed (`publications`, `publicationNumber`, `Publication`, `getPublication`); Control API serves `/api/*` with `GET /workflows/{workflowId}/publications/{publicationNumber}`, no system version endpoint; digest vectors regenerated for all six valid fixtures; checked-in OpenAPI regenerated and the smoke scenario updated. Durable documents updated: workflow format specification, E2.2 and E2.3 Epics, E2-S1 decision, roadmap, and this plan. Verification: `bun test packages/workflow` (249 pass), `bun test packages/database` (19 pass), control-api `test` (26 pass), `generate-openapi`, `smoke`, `bun run check`, `bun run lint`, Markdown lint, and `node scripts/check-links.mjs` all green.
