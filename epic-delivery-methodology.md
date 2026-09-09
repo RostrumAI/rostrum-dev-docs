@@ -20,7 +20,7 @@ One or more implementation plans per active Epic
 
 Product strategy defines the problem, audience, product boundaries, and architectural principles. The roadmap orders observable product goals.
 
-A technical Epic defines one coherent engineering outcome needed to reach a roadmap milestone. It contains scope, inherited contracts, technical requirements, non-goals, and acceptance criteria. It does not contain task status or file-by-file implementation instructions.
+A technical Epic defines one coherent product capability needed to reach a roadmap milestone. It explains the intended behavior, scope, constraints, non-goals, and observable acceptance criteria. Include technical detail when it explains what a user can do or inspect, or a boundary the implementation must preserve. An Epic is not a detailed design or implementation plan.
 
 Each implementation plan covers one coherent workstream within an Epic. Its owner records the current repository state, implementation sequence, checkpoints, decisions, progress, verification, and recovery information. For the plan format, see [Epic implementation plan format](epic-implementation-plan-format.md).
 
@@ -38,13 +38,15 @@ An Epic may have several plans when separate owners can work on distinct parts o
 
 ## Writing an Epic
 
-Write for an engineer who knows the product but has not designed this subsystem. Name the behavior and the decisions the Epic must settle. For example, replace "define invocation validation" with the workflow identity, required inputs, supported step types, and rejection behavior that must be specified. Introduce code field names alongside their meaning.
+Write for an engineer who knows the product but has not designed the subsystem. Lead with the capability and the behavior users should expect. Explain unfamiliar terms, identify who or what each rule applies to, and distinguish limits on a deployment from limits on individual uses of it.
 
-Keep requirements at the level of an engineering outcome. Configurable network listeners are an Epic requirement; calling a particular listen function belongs in an implementation plan. Each execution Epic includes a concrete workflow with named steps, inputs, expected output, and failure cases. Acceptance checks those outcomes rather than asking only for a "reviewed contract."
+Keep useful technical detail without designing the implementation in the Epic. Execution states belong here when they help a caller understand progress or inspect an outcome, even if the engine also uses them internally. Handler interfaces, schema fields, algorithms, operation catalogs, and exhaustive error cases belong in the specification or implementation plan.
 
-Distinguish existing rules from proposals. Link the current specification, identify which rules must change, and state where unresolved decisions will be recorded before dependent code is written. Review requirements belong in the plan's ownership and risk sections, not as repeated approval gates with no defined artifact.
+Use a short product scenario when it clarifies a requirement. Do not require a sample implementation or executable test procedure in every Epic. The implementation plan selects the concrete operations and workflows, supplies their inputs and expected results, and explains how to verify them.
 
-The Epic introducing a behavior owns focused verification of that behavior. A dedicated testing Epic may own shared examples, test infrastructure, and full-system checks without making earlier Epics responsible for building that infrastructure independently.
+Use terminology from the current governing decisions, and distinguish agreed direction from implemented behavior and unresolved proposals. Link detailed rules rather than repeating them. Acceptance criteria state observable outcomes; review ownership and verification procedures belong with the work that performs them.
+
+The Epic introducing a behavior owns focused verification of that behavior. A dedicated testing Epic may consolidate examples and test infrastructure without making earlier Epics depend on that later work.
 
 ## Plans and checkpoints
 
@@ -74,20 +76,20 @@ An independent agent reviews the implementation against the Epic and plan before
 
 The current "Local workflow execution" Epic is too broad to be one coherent technical Epic. It becomes roadmap milestone M2:
 
-> A caller can invoke an exact published workflow version through the Control API, disconnect, and later retrieve its progress, output, or failures after the local daemon executes every workflow interface v1 control-flow construct.
+> A caller can invoke an exact workflow publication through the Control API, disconnect, and later retrieve progress, output, or failures. One daemon supports independent concurrent runs and every M2 control-flow construct.
 
 M2 is delivered through these technical Epics:
 
 | Epic | Technical outcome | Independent acceptance |
 | --- | --- | --- |
 | E2.1: Establish the daemon network boundary | Run independently configured Control API and daemon services over private authenticated HTTP, with both using the same Postgres database through `packages/database`; move backend services to `apis/` | Focused service checks prove authenticated requests, readiness, errors, and independent shutdown; E2.6 owns the automated separate-network environment |
-| E2.2: Execute sequential workflows | Specify the supported deterministic steps, request checks, execution state, data bindings, handler responses, and final result while implementing sequential execution | A named sequential workflow returns the expected output after the caller disconnects; invalid requests create no run and execution errors prevent success |
-| E2.3: Execute conditional workflows | Specify operator types and branch priority, select one destination, and distinguish unselected work from failures | A concrete workflow exercises each destination, boundary values, and invalid comparisons without running unselected steps |
-| E2.4: Execute parallel paths and joins | Execute bounded parallel work, wait for matching successful paths, share capacity across runs, and stop and settle failed work within its execution scope | A concrete workflow produces the expected joined output at different capacities and reports observed failures in stable order |
-| E2.5: Execute bounded loops | Specify ordered iteration results and workflow-configured error policies, including parallel work inside an iteration | A concrete collection produces ordered results; fail-fast stops later iterations and error tolerance captures eligible iteration failures and continues |
-| E2.6: Complete M2 conformance | Define the testing strategy, shared example catalog, layer responsibilities, and real-service environment | One command proves all M2 constructs, shared-database and authenticated network access, client disconnect, and cleanup |
+| E2.2: Execute sequential workflows | Invoke a selected publication, follow its sequence, and inspect each run's progress and outcome | Accepted runs continue after client disconnect and remain independent, including concurrent invocations of the same publication |
+| E2.3: Execute conditional workflows | Select one path from declared conditions and show which work was selected or excluded | A pricing scenario produces the correct result on each path; invalid conditions remain distinguishable from false conditions |
+| E2.4: Execute parallel paths and joins | Combine independent work within a run while sharing worker capacity across runs | Joins wait for successful paths, results do not depend on completion order, and busy runs do not starve other eligible runs |
+| E2.5: Execute bounded loops | Process items in order with author-selected iteration error handling | Fail-fast prevents later iterations; permitted error capture preserves the failed item's position and allows later items to run |
+| E2.6: Complete M2 conformance | Demonstrate consistent M2 behavior across execution layers and real services | One command proves the combined constructs, shared storage and secure network access, concurrent runs, client disconnect, and cleanup |
 
-The Epics introduce rules with the behavior that uses them. E2.2 defines the shared run, handler, binding, result, and failure rules needed for sequential execution. E2.3 through E2.5 update the workflow specification, types, validator, schemas, example workflows, and daemon together for each control-flow construct. An error captured by a configured loop policy is an iteration result, not automatically a failed run. E2.4's handling of parallel failures must support that distinction. E2.6 compares the finished implementations and owns reusable testing infrastructure rather than introducing another interpretation of workflow behavior.
+The Epics introduce behavior in dependency order. E2.2 establishes run identity, progress, data flow, and results. E2.3 through E2.5 extend execution with each control-flow construct while keeping the specification, validation, and runtime consistent. Their implementation plans supply detailed contracts and executable examples. E2.6 consolidates those examples and verifies the whole system rather than defining a different execution model.
 
 ### Current work mapping
 
