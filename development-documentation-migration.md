@@ -73,14 +73,14 @@ The human-readable `docs/specs/workflow-interface-v1.md` moves to `rostrum-dev-d
 
 Replace the current broad Epic 2 with roadmap milestone M2 and six technical Epics:
 
-1. E2.1: Make workflow interface v1 executable.
-2. E2.2: Establish the local daemon boundary.
-3. E2.3: Execute sequential workflows.
-4. E2.4: Execute conditional workflows.
-5. E2.5: Execute parallel paths and joins.
-6. E2.6: Execute bounded loops.
+1. E2.1: Establish the daemon network boundary.
+2. E2.2: Execute sequential workflows.
+3. E2.3: Execute conditional workflows.
+4. E2.4: Execute parallel paths and joins.
+5. E2.5: Execute bounded loops.
+6. E2.6: Complete M2 conformance.
 
-The detailed mapping from current work is in [Epic delivery methodology](epic-delivery-methodology.md).
+The detailed mapping from current work is in [Epic delivery methodology](epic-delivery-methodology.md). Execution contracts move with the first Epic that implements each behavior instead of forming a separate upfront Epic.
 
 Close E2-02 when this methodology and migration are approved. Create one or more plans when a technical Epic is ready to start.
 

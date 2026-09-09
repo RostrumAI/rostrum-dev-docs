@@ -22,6 +22,12 @@ A workflow document is a single JSON object in camelCase, optimized for machine 
 
 The JSON Schema 2020-12 document emitted from [`packages/workflow/src/schema.ts`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/src/schema.ts) covers the document-shape rules that validation stage 2 enforces. Topology, conditional semantics, termination, data references, and lifecycle rules are enforced by the staged validator described in [Validation](#validation); JSON Schema cannot express them.
 
+### Planned M2 execution work
+
+This specification describes the accepted document and publication rules, not a completed execution engine. [E2.2](../epics/m2/e2-2-execute-sequential-workflows.md) establishes independent runs, progress, data flow, and final results. [E2.3](../epics/m2/e2-3-execute-conditional-workflows.md) adds conditional selection and resolves its comparison and completion rules. [E2.4](../epics/m2/e2-4-execute-parallel-paths-and-joins.md) adds structured parallel paths and joins. [E2.5](../epics/m2/e2-5-execute-bounded-loops.md) adds ordered iterations with configurable error handling. Their implementation plans define the detailed contracts and executable examples; each workstream keeps this specification, validation, and execution consistent.
+
+The [E2-S1 execution proposal](../decisions/m2/e2-s1-local-execution-semantics.md) is input to those Epics, not an override of the rules below. In particular, requiring explicit conditional destinations and restricting parallel graphs can reject documents accepted today. The owning Epic must apply the [versioning rules](#breaking-and-additive-changes) before introducing those restrictions.
+
 ## Document structure
 
 ### Top-level fields

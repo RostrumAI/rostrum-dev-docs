@@ -22,17 +22,19 @@ The plan format follows the useful parts of [OpenAI ExecPlans](https://developer
 
 ## Artifact boundary
 
-The Epic defines what must be true. Each plan defines how to complete one scoped part of that outcome.
+The Epic describes the product capability and observable behavior. Each plan defines how to implement and verify one scoped part of that outcome.
 
 | Epic | Implementation plan |
 | --- | --- |
-| Technical outcome | Current repository state |
+| Product outcome and user-visible behavior | Current repository state and implementation design |
 | Scope and non-goals | Files, interfaces, and implementation sequence |
-| Inherited contracts and invariants | Decisions and discoveries |
-| Acceptance criteria | Commands, scenarios, and expected results |
-| Durable product meaning | Temporary progress and recovery state |
+| Governing decisions and constraints | Detailed decisions and discoveries |
+| Observable acceptance criteria | Concrete workflows, inputs, expected results, and verification commands |
+| Technical concepts needed to understand the capability | Handler choices, schemas, algorithms, and test controls |
 
 Do not restate the complete Epic in the plan. Link to it and include only the context needed to implement it safely.
+
+Include technical states and boundaries in the Epic when they explain what a user can observe. Select example operations and build executable scenarios in the plan instead of predesigning them in the Epic. A short product scenario may remain in the Epic when it resolves ambiguity.
 
 ## Plan lifecycle
 

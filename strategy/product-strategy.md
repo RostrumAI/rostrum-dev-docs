@@ -173,7 +173,7 @@ The Control API is the product contract between the Rostrum daemon, control clie
 - managing context sources, context policies, and context provenance;
 - receiving external events and reporting outcomes.
 
-For local and self-hosted use, the Control API is served by or alongside the local Rostrum daemon. For hosted use, the same contract is implemented by the tenant-aware control plane and routes work to remote execution infrastructure. The daemon is responsible for execution; the API is responsible for the contracts and commands that govern it.
+For local and self-hosted use, the Control API and daemon may share a host or run on different machines. The Control API sends service commands and retrieves live run state through the daemon's private, authenticated HTTP API. Both services independently access the same Postgres database using shared types and access code in `packages/database`; they do not share process memory or application files. The daemon owns execution, including M2's in-memory run state. Sharing a database does not bring durable run checkpoints or restart recovery forward from M3. For hosted use, the same caller-facing Control API contract is implemented by the tenant-aware control plane and routes work to remote execution infrastructure.
 
 ### 4.9 Control clients
 
@@ -265,7 +265,7 @@ flowchart LR
     C --> U
 ```
 
-The important architectural rule is the separation of three top-level components: the Rostrum daemon executes workflows; the Control API defines the contracts, authorization, approvals, and observation/control operations; and control clients provide interfaces over that API. The web application, desktop application, mobile-responsive views, CLI, SDK, and integrations use the same authoritative records. A run must continue if a client disconnects, and the daemon must never require a client process to remain alive.
+The important architectural rule is the separation of three top-level components: the Rostrum daemon executes workflows; the Control API defines the contracts, authorization, approvals, and observation and control operations; and control clients provide interfaces over that API. The Control API and daemon may run on the same host or different machines and communicate only through their private service boundary. The web application, desktop application, mobile-responsive views, CLI, SDK, and integrations use the same authoritative records. A run must continue if a client disconnects, and the daemon must never require a client process to remain alive.
 
 ## 6. Open-source and cloud boundary
 
@@ -318,14 +318,14 @@ This order keeps collaboration and hosted scale from delaying the first useful, 
 
 ## 8. What technical Epics must resolve
 
-This strategy does not specify detailed screens, endpoint schemas, database tables, node-by-node behavior, model-provider prompts, the final state-storage implementation, specific Docker or microVM implementations, pricing, or implementation plans. The high-level direction for workflow JSON, explicit inputs, revisioned Git collaboration, per-node simulation, the Model Provider Layer, container-defined scripts, and visual authoring is decided. Technical Epics specify the required engineering outcomes and acceptance criteria.
+This strategy does not specify detailed screens, endpoint schemas, database tables, node-by-node behavior, model-provider prompts, the final state-storage implementation, specific Docker or microVM implementations, pricing, or implementation plans. The high-level direction for workflow JSON, explicit inputs, revisioned Git collaboration, per-node simulation, the Model Provider Layer, container-defined scripts, and visual authoring is decided. Technical Epics describe the product capabilities, governing constraints, and observable acceptance criteria. Specifications and implementation plans provide the detailed contracts and designs.
 
 Each technical Epic defines:
 
-- One coherent technical outcome.
+- One coherent product capability.
 - Scope and non-goals.
 - Inherited contracts and invariants.
-- Functional, failure, and safety requirements.
+- Functional, failure, and safety behavior, including technical states users need to understand or inspect.
 - Local, self-hosted, and cloud boundaries where relevant.
 - Dependencies, technical risks, and decisions that require approval.
 - Independently demonstrable acceptance criteria.
