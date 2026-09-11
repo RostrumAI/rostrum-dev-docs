@@ -152,8 +152,8 @@ Keep environment-over-YAML-over-default precedence and camelCase YAML keys. `CON
 | `DATABASE_URL` / `databaseUrl` | Both | Required in executable service configuration; same database target, potentially different credentials |
 | `DATABASE_TLS_MODE` / `databaseTlsMode` | Both and migration CLI | `verify-full` by default; `disable` allowed only with the local exception and a literal loopback target |
 | `DATABASE_CA_FILE` / `databaseCaFile` | Both and migration CLI | Optional PEM trust bundle; otherwise use system trust, never disable verification |
-| `TLS_CERT_FILE` / `tlsCertFile` | Each TLS listener | Server PEM certificate chain; required together with key unless a local plaintext listener is explicitly allowed |
-| `TLS_KEY_FILE` / `tlsKeyFile` | Each TLS listener | Matching server private key; validate readability and TLS setup before listening |
+| `TLS_CERT_FILE` / `tlsCertFile` | Both listeners | PEM certificate chain; required together with key unless a local plaintext listener is explicitly allowed |
+| `TLS_KEY_FILE` / `tlsKeyFile` | Both listeners | Matching private key; validate readability and TLS setup before listening |
 | `ALLOW_INSECURE_LOCAL` / `allowInsecureLocal` | Both and migration CLI | Default false; valid only in development/test; never bypasses daemon authentication |
 | `DAEMON_URL` / `daemonUrl` | Control API | Required origin URL; HTTPS normally; reject userinfo, non-root paths, query, fragment, and unsupported schemes |
 | `DAEMON_CA_FILE` / `daemonCaFile` | Control API | Optional PEM trust bundle for the daemon certificate |
@@ -166,8 +166,6 @@ Per-process `HOST`/`PORT` variables remain sufficient for independent configurat
 The migration CLI consumes the database, local-exception, and environment settings from environment variables; it does not gain a second service-config file selector. Preserve explicit migration targeting and document the required TLS settings alongside `db:migrate`.
 
 A remote deployment supplies a private daemon address, certificate whose subject alternative name matches `DAEMON_URL`, trusted CA material where required, independently provisioned token copies, and database connection settings on both services. Operators restrict the daemon port to Control API/management hosts with network controls; a configurable listener is not itself a firewall. Token or certificate replacement takes effect on process restart; zero-downtime rotation is not promised by this Epic.
-
-The daemon link uses one-way TLS. The daemon presents its server certificate; the Control API verifies the certificate chain and the hostname or IP SAN against the configured `DAEMON_URL`. The Control API does not present a client certificate — its identity is the bearer token — so the daemon needs no trust material for callers and no mutual-TLS identity mapping. A certificate is needed only for each endpoint that terminates TLS: the daemon listener, and the Control API's own listener when that listener is encrypted for its callers. A remote deployment with a loopback or proxied Control API therefore provisions one PEM pair, local plaintext development provisions none, and exercising TLS locally provisions one self-signed pair for the daemon plus `DAEMON_CA_FILE` on the Control API. Client certificates are optional future hardening and add to, rather than replace, the token contract.
 
 Provision token and private-key files for the service account only (mode `0600`, or equivalent restricted platform permissions), outside the checkout. Do not mount a common writable configuration directory between services or expose a local-exception listener through a remote plaintext forwarder. Operational examples must not put token contents in command-line arguments, shell tracing, or logged configuration.
 
