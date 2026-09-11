@@ -4,7 +4,7 @@ Status: Planned
 
 Roadmap milestone: [M2: Local workflow execution](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [Epic 1](1-establish-daemon-network-boundary.md), [Workflow interface v1](../../specifications/workflow-interface-v1.md), its validator, and immutable workflow publications
+Depends on: [Epic 1](1-establish-daemon-network-boundary.md), [Workflow format v1](../../specifications/workflow-interface-v1.md), its validator, and immutable workflow publications
 
 ## Outcome
 
@@ -51,7 +51,7 @@ The active-work list, `currentSteps`, shows ready and running steps rather than 
 
 ## Specification and implementation ownership
 
-[Workflow interface v1](../../specifications/workflow-interface-v1.md) defines the accepted workflow document. [M2 execution decision](../../decisions/m2/local-execution-semantics.md) contains proposed execution semantics. This Epic establishes the sequential behavior above and keeps the specification, validation, daemon, and APIs consistent. Changes that affect accepted documents must follow the governing versioning rules.
+[Workflow format v1](../../specifications/workflow-interface-v1.md) defines the accepted workflow document. [M2 execution decision](../../decisions/m2/local-execution-semantics.md) contains proposed execution semantics. This Epic establishes the sequential behavior above and keeps the specification, validation, daemon, and APIs consistent. Changes that affect accepted documents must follow the governing versioning rules.
 
 Implementation plans select the deterministic operations, define data and error shapes, and provide executable workflows and verification procedures. Those details are not an operation catalog in this Epic. Epic 3 owns conditional completion; Epic 4 adds parallel scheduling and failure handling; Epic 6 consolidates reusable testing infrastructure without becoming a prerequisite for this Epic's focused checks.
 

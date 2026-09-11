@@ -29,7 +29,7 @@ The proposed execution rules are:
 
 ## Context
 
-Workflow interface v1 defines the shape and validation of a workflow document, but it does not fully specify runtime behavior. This proposal is input to Epics 2 through 5. Each Epic resolves and implements the part of the contract needed for its execution path.
+Workflow format v1 defines the shape and validation of a workflow document, but it does not fully specify runtime behavior. This proposal is input to Epics 2 through 5. Each Epic resolves and implements the part of the contract needed for its execution path.
 
 The execution model must satisfy four requirements:
 
@@ -96,8 +96,8 @@ The run state transitions define the top-level execution lifecycle for a workflo
 
 | Current state | Event / Trigger | Guard | Next state | Effect / Output |
 | --- | --- | --- | --- | --- |
-| `[None]` | Invocation request | The exact published workflow version exists, input keys match `workflow.inputs` exactly, and all required step handlers are registered | `queued` | Allocates a run ID, initializes execution tracking and remaining-dependency counters, and enqueues the `firstNode` step. |
-| `[None]` | Invocation request | Unknown workflow version, missing input, undeclared input, or unregistered step type | `[Rejected]` | Rejects the request with a structured error. No run is created. |
+| `[None]` | Invocation request | The exact publication exists, input keys match `workflow.inputs` exactly, and all required step handlers are registered | `queued` | Allocates a run ID, initializes execution tracking and remaining-dependency counters, and enqueues the `firstNode` step. |
+| `[None]` | Invocation request | Unknown workflow publication, missing input, undeclared input, or unregistered step type | `[Rejected]` | Rejects the request with a structured error. No run is created. |
 | `queued` | Scheduler start turn | The run has not started yet | `running` | Activates the `firstNode` step, moves the step instance to `ready`, and updates `currentSteps`. |
 | `running` | Dispatch step | A worker slot is available, a step instance is `ready`, and its execution scope is not draining after an error | `running` | Moves the step instance to `running`, starts the step handler, and updates `currentSteps`. |
 | `running` | Step handler success | Output matches the exact schema, the execution scope is not draining, and the step routes to a successor | `running` | Records step outputs, evaluates successors or conditionals, activates reached steps, updates dependencies, and updates `currentSteps`. |
@@ -240,7 +240,7 @@ The dependency array defines the readiness rule; the countdown is its runtime in
 
 The Control API provides a read-only projection of the in-memory execution state. M2 Epic 2 proposes internal `stopping` as a drain state, projected as public `running` until all active handlers settle; the public status then becomes `failed`. The lifecycle tables above describe internal states, not an additional public status.
 
-The proposed API below uses `publicationNumber` for the execution-facing publication identity. Document compatibility remains governed by the workflow interface specification; no separate execution version is introduced. Step labels below are readable aliases for step IDs.
+The proposed API below uses `publicationNumber` for the execution-facing publication identity. Document compatibility remains governed by the workflow format specification; no separate execution version is introduced. A semantic version such as `"1.0.0"` is not the publication identity. Step labels below are readable aliases for step IDs.
 
 ```json
 {
@@ -283,7 +283,7 @@ The proposed API below uses `publicationNumber` for the execution-facing publica
 
 ## M2 workflow contract changes
 
-These proposed semantics require changes to the current workflow interface. They do not replace accepted rules by publication of this decision record. The owning Epic must resolve specification versioning, update types, schemas and validation, and implement the matching runtime behavior:
+These proposed semantics require changes to the current workflow format. They do not replace accepted rules by publication of this decision record. The owning Epic must resolve specification versioning, update types, schemas and validation, and implement the matching runtime behavior:
 
 | Area | Current workflow rule | Proposed execution rule | Owning Epic |
 | --- | --- | --- | --- |
