@@ -86,9 +86,17 @@ Close E2-02 when this methodology and migration are approved. Create one or more
 
 ### M3: Durable runs and human control
 
-Treat the current Epic 3 as roadmap milestone M3. Split it into technical Epics after M2 establishes stable execution, handler, daemon, and Control API contracts.
+M3 is now split into seven technical Epics:
 
-Do not migrate the existing Epic 3 task files as plans. Use them as source material when the technical Epics are written against the implemented repository.
+1. [E3.1: Recover durable runs](epics/m3/e3-1-recover-durable-runs.md).
+2. [E3.2: Retry bounded failures](epics/m3/e3-2-retry-bounded-failures.md).
+3. [E3.3: Pause, resume, and cancel runs](epics/m3/e3-3-pause-resume-and-cancel-runs.md).
+4. [E3.4: Wait for human decisions](epics/m3/e3-4-wait-for-human-decisions.md).
+5. [E3.5: Inspect run timelines](epics/m3/e3-5-inspect-run-timelines.md).
+6. [E3.6: Retrieve run artifacts](epics/m3/e3-6-retrieve-run-artifacts.md).
+7. [E3.7: Complete M3 conformance](epics/m3/e3-7-complete-m3-conformance.md).
+
+M2 supplies the stable execution, handler, daemon, and Control API contracts. The M3 Epics require implementation plans to resolve storage, checkpoint, interruption, and API details against the implemented repository. They do not migrate the old Epic 3 task files as plans.
 
 ### M4 through M13
 

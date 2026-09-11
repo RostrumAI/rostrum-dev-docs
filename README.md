@@ -35,8 +35,15 @@ See [Epic delivery methodology](epic-delivery-methodology.md) and [Epic implemen
 - [E2.4: Execute parallel paths and joins](epics/m2/e2-4-execute-parallel-paths-and-joins.md)
 - [E2.5: Execute bounded loops](epics/m2/e2-5-execute-bounded-loops.md)
 - [E2.6: Complete M2 conformance](epics/m2/e2-6-complete-m2-conformance.md)
+- [E3.1: Recover durable runs](epics/m3/e3-1-recover-durable-runs.md)
+- [E3.2: Retry bounded failures](epics/m3/e3-2-retry-bounded-failures.md)
+- [E3.3: Pause, resume, and cancel runs](epics/m3/e3-3-pause-resume-and-cancel-runs.md)
+- [E3.4: Wait for human decisions](epics/m3/e3-4-wait-for-human-decisions.md)
+- [E3.5: Inspect run timelines](epics/m3/e3-5-inspect-run-timelines.md)
+- [E3.6: Retrieve run artifacts](epics/m3/e3-6-retrieve-run-artifacts.md)
+- [E3.7: Complete M3 conformance](epics/m3/e3-7-complete-m3-conformance.md)
 
-M2 is the active roadmap milestone. M3 remains a roadmap milestone until M2 contracts stabilize.
+M2 is the active roadmap milestone. M3 is scoped and ready for implementation planning after M2 contracts stabilize.
 
 ### Specifications
 

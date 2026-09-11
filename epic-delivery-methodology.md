@@ -104,10 +104,26 @@ The Epics introduce behavior in dependency order. E2.2 establishes run identity,
 | E2-01 | E2.2 prerequisite or maintenance pull request |
 | E2-02 | Closed when this methodology and migration are approved |
 
+## Milestone 3: Durable runs and human control
+
+M3 is delivered through seven technical Epics:
+
+| Epic | Technical outcome | Independent acceptance |
+| --- | --- | --- |
+| [E3.1: Recover durable runs](epics/m3/e3-1-recover-durable-runs.md) | Persist accepted runs and recover interrupted M2 execution | A run survives service restart, preserves committed work, and remains inspectable while the daemon is unavailable |
+| [E3.2: Retry bounded failures](epics/m3/e3-2-retry-bounded-failures.md) | Retry explicitly eligible failures within durable attempt limits | A retry succeeds or exhausts with every attempt visible and no unbounded repeat |
+| [E3.3: Pause, resume, and cancel runs](epics/m3/e3-3-pause-resume-and-cancel-runs.md) | Apply durable operator commands at recoverable execution boundaries | A caller can pause, resume, or cancel one run and distinguish request acceptance from applied execution |
+| [E3.4: Wait for human decisions](epics/m3/e3-4-wait-for-human-decisions.md) | Wait durably for one validated general decision and continue its selected path | A decision survives restart, accepts one response, and exposes its continuation and response |
+| [E3.5: Inspect run timelines](epics/m3/e3-5-inspect-run-timelines.md) | Expose committed per-run events through cursor-based retrieval | A reconnecting caller can read complete ordered history without a live daemon |
+| [E3.6: Retrieve run artifacts](epics/m3/e3-6-retrieve-run-artifacts.md) | Store and retrieve bounded immutable evidence with integrity metadata | A caller retrieves an artifact independently and verifies its producer, size, and digest |
+| [E3.7: Complete M3 conformance](epics/m3/e3-7-complete-m3-conformance.md) | Demonstrate the combined durable lifecycle through real services | One isolated command proves restart, retry, controls, decisions, timelines, artifacts, and M2 compatibility |
+
+E3.1 establishes the durable source of truth and recovery rules. E3.2 through E3.6 add independent lifecycle capabilities while extending the same checkpoint and observation contracts. E3.7 composes them into one real-service demonstration. The Epics require implementation plans to resolve storage, schemas, interruption behavior, and test controls without prescribing a database, queue, artifact backend, or live subscription system in advance.
+
+M3 is separate from later governance. A decision records a response and available caller identity, but does not assign approvers or send notifications. Operator controls affect one run, while human decisions are workflow steps.
+
 ## Other roadmap work
 
-The current Epic 3 becomes roadmap milestone M3. Split it into technical Epics only when M2 contracts are stable and M3 is ready for implementation.
-
-Milestones 4 through 13 remain roadmap entries until their dependencies and boundaries are clear. Do not create speculative Epic files or plans for them.
+Milestones 4 through 13 remain roadmap entries. Do not create speculative Epic files or plans for them until their dependencies and boundaries are clear.
 
 For the repository cutover, see [Development documentation migration](development-documentation-migration.md).
