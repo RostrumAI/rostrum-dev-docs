@@ -26,7 +26,7 @@ The JSON Schema 2020-12 document emitted from [`packages/workflow/src/schema.ts`
 
 This specification describes the accepted document and publication rules, not a completed execution engine. [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) establishes independent runs, progress, data flow, and final results. [M2 Epic 3](../epics/m2/3-execute-conditional-workflows.md) adds conditional selection and resolves its comparison and completion rules. [M2 Epic 4](../epics/m2/4-execute-parallel-paths-and-joins.md) adds structured parallel paths and joins. [M2 Epic 5](../epics/m2/5-execute-bounded-loops.md) adds ordered iterations with configurable error handling. Their implementation plans define the detailed contracts and executable examples; each workstream keeps this specification, validation, and execution consistent.
 
-The [M2 execution decision](../decisions/m2/local-execution-semantics.md) is input to those Epics, not an override of the rules below. In particular, requiring explicit conditional destinations and restricting parallel graphs can reject documents accepted today. The owning Epic must apply the [versioning rules](#breaking-and-additive-changes) before introducing those restrictions.
+Those Epics own resolving the execution semantics and any change to the rules below. Requiring explicit conditional destinations or restricting parallel graphs would reject documents accepted today, so the owning Epic must apply the [versioning rules](#breaking-and-additive-changes) before introducing such restrictions.
 
 ## Document structure
 

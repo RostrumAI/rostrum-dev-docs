@@ -40,15 +40,6 @@ system rather than defining a different execution model.
 
 ## Implementation order
 
-### Before implementation starts
-
-Epics 2 through 5 implement the semantics proposed by the
-[M2 execution decision](../../decisions/m2/local-execution-semantics.md), which
-is input rather than an approved contract. Resolve its status first. Any
-restriction it places on documents the workflow format specification accepts
-today must follow that specification's
-[versioning rules](../../specifications/workflow-interface-v1.md#breaking-and-additive-changes).
-
 ### Dependency chain
 
 | Epic | Depends on |
@@ -59,6 +50,12 @@ today must follow that specification's
 | 4. Parallel paths and joins | Epic 3 |
 | 5. Bounded loops | Epic 4 |
 | 6. Conformance | Epic 5 |
+
+Epics 2 through 5 each own resolving the execution semantics they introduce and
+any change to the workflow format specification, applying its
+[versioning rules](../../specifications/workflow-interface-v1.md#breaking-and-additive-changes)
+to restrictions on documents accepted today. Resolve those choices before
+implementing the Epic that depends on them.
 
 These dependencies order integration, not authoring. Epics 2 through 5 extend
 one engine state machine, so their engine transitions are serial. Specification

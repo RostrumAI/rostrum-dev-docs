@@ -38,7 +38,7 @@ Epic 5 adds workflow-configured capture of iteration errors. Parallel work insid
 
 ## Specification and implementation ownership
 
-The [M2 execution decision](../../decisions/m2/local-execution-semantics.md) supplies the proposed parallel execution model. Keep the [workflow specification](../../specifications/workflow-interface-v1.md), graph validation, and runtime consistent, applying the governing versioning rules to new restrictions on accepted graphs.
+This Epic defines the parallel execution model. Keep the [workflow specification](../../specifications/workflow-interface-v1.md), graph validation, and runtime consistent, applying the governing versioning rules to new restrictions on accepted graphs.
 
 The implementation plan supplies executable workflows, handler choices, scheduling details, and controlled concurrency checks. Epic 6 owns the shared example catalog and real-service test environment; neither is a prerequisite for this Epic's focused verification.
 

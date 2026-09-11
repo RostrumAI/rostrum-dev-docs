@@ -29,7 +29,7 @@ This scenario defines the behavior to demonstrate. The implementation plan suppl
 
 ## Specification and implementation ownership
 
-The [accepted workflow specification](../../specifications/workflow-interface-v1.md) lists conditional operators but leaves some value semantics open. It also permits a branch without a destination to end the workflow. [M2 execution decision](../../decisions/m2/local-execution-semantics.md) proposes unique priorities and explicit destinations leading to result steps. Resolve these choices in the specification and implementation together; any restriction on accepted documents must follow the governing versioning rules.
+The [accepted workflow specification](../../specifications/workflow-interface-v1.md) lists conditional operators but leaves some value semantics open. It also permits a branch without a destination to end the workflow. This Epic resolves those choices in the specification and implementation together, including whether branch priorities must be unique and whether every branch and default requires an explicit destination. Any restriction on accepted documents must follow the governing versioning rules.
 
 Detailed operator tables, error codes, and test procedures belong in the specification and implementation plan. Epic 6 consolidates shared examples and full-system verification; this Epic retains focused verification of conditional behavior.
 

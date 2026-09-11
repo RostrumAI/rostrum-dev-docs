@@ -39,7 +39,7 @@ This Epic owns choosing and implementing run persistence. Compare the existing P
 
 Resolve checkpoint boundaries, interrupted-attempt treatment, invocation-key scope and lifetime, response replay, and behavior when a commit's result is uncertain. Define the supported restart and storage-failure model, storage setup and migration, and service read/write responsibilities. The daemon alone advances execution; the Control API reads committed execution records. Any required change to M2's private-HTTP coordination boundary must be explicit rather than introduced through implicit database polling.
 
-The [M2 execution proposal](../../decisions/m2/local-execution-semantics.md#m3-persistence-and-idempotency-handoff) supplies persistence ideas, not an approved storage or recovery design. Resolve those choices against the delivered M2 implementation. Record durable rules in the appropriate specification or decision and keep storage, runtime, and API behavior consistent.
+This Epic owns the storage and recovery design; no earlier design is assumed. Resolve those choices against the delivered M2 implementation. Record durable rules in the appropriate specification or decision and keep storage, runtime, and API behavior consistent.
 
 This Epic records the execution events needed to explain its checkpoints and recovery. [Epic 5](5-inspect-run-timelines.md) adds the caller's timeline and cursor contract. [Epic 2](2-retry-bounded-failures.md) through [Epic 4](4-wait-for-human-decisions.md) extend checkpoints and recovery for retries, controls, and decisions; each owns verification of its additions. Detailed record shapes, algorithms, interruption controls, and executable scenarios belong in implementation plans.
 
