@@ -1,10 +1,10 @@
-# E3.6: Retrieve run artifacts
+# Epic 6: Retrieve run artifacts
 
 Status: Planned
 
 Roadmap milestone: [M3: Durable runs and human control](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E3.1](e3-1-recover-durable-runs.md) and [E3.5](e3-5-inspect-run-timelines.md)
+Depends on: [Epic 1](1-recover-durable-runs.md) and [Epic 5](5-inspect-run-timelines.md)
 
 ## Outcome
 
@@ -28,7 +28,7 @@ Choose where local artifact bytes live. Compare Postgres byte storage, a filesys
 
 Resolve maximum artifact size, supported media types, naming and identity, retention duration, cleanup ownership, and behavior when metadata commits but bytes do not or vice versa. Ensure a failed artifact does not make a successful workflow claim unverifiable evidence. Decide which payloads are sensitive and whether the first local implementation redacts, refuses, or stores them under an explicit policy.
 
-[E3.1](e3-1-recover-durable-runs.md) owns durable storage and checkpoint atomicity. [E3.5](e3-5-inspect-run-timelines.md) owns event references and run inspection. [E3.7](e3-7-complete-m3-conformance.md) verifies the complete retrieval and integrity path. Detailed byte protocols, schemas, and fixture commands belong in implementation plans.
+[Epic 1](1-recover-durable-runs.md) owns durable storage and checkpoint atomicity. [Epic 5](5-inspect-run-timelines.md) owns event references and run inspection. [Epic 7](7-complete-m3-conformance.md) verifies the complete retrieval and integrity path. Detailed byte protocols, schemas, and fixture commands belong in implementation plans.
 
 ## Non-goals
 

@@ -1,10 +1,10 @@
-# E2.3: Execute conditional workflows
+# Epic 3: Execute conditional workflows
 
 Status: Planned
 
 Roadmap milestone: [M2: Local workflow execution](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E2.2](e2-2-execute-sequential-workflows.md)
+Depends on: [Epic 2](2-execute-sequential-workflows.md)
 
 ## Outcome
 
@@ -18,8 +18,8 @@ A workflow chooses one path from its declared conditions. Callers can see which 
 - Select the first matching branch in ascending numeric priority, or the declared default if none matches. Define the treatment of duplicate priorities. Branch-array order must not override the chosen priority rule.
 - Execute only the selected path. Its outputs become available only after the selected steps execute successfully; selecting a path does not itself produce values.
 - Let callers inspect the selected rule and distinguish unselected steps from failed, waiting, and completed work. A step reachable through the selected path must not be marked unselected merely because another rule also names it.
-- Define how each selected path reaches its final result, using E2.2's result behavior. A conditional does not permit a downstream step to depend on mutually exclusive paths that cannot both execute.
-- Report binding, evaluation, and selected-step failures without silently trying a different branch or falling through to the default. E2.5 defines whether a configured loop policy may capture an iteration error.
+- Define how each selected path reaches its final result, using Epic 2's result behavior. A conditional does not permit a downstream step to depend on mutually exclusive paths that cannot both execute.
+- Report binding, evaluation, and selected-step failures without silently trying a different branch or falling through to the default. Epic 5 defines whether a configured loop policy may capture an iteration error.
 
 ## Product validation scenario
 
@@ -29,9 +29,9 @@ This scenario defines the behavior to demonstrate. The implementation plan suppl
 
 ## Specification and implementation ownership
 
-The [accepted workflow specification](../../specifications/workflow-interface-v1.md) lists conditional operators but leaves some value semantics open. It also permits a branch without a destination to end the workflow. [E2-S1](../../decisions/m2/e2-s1-local-execution-semantics.md) proposes unique priorities and explicit destinations leading to result steps. Resolve these choices in the specification and implementation together; any restriction on accepted documents must follow the governing versioning rules.
+The [accepted workflow specification](../../specifications/workflow-interface-v1.md) lists conditional operators but leaves some value semantics open. It also permits a branch without a destination to end the workflow. This Epic resolves those choices in the specification and implementation together, including whether branch priorities must be unique and whether every branch and default requires an explicit destination. Any restriction on accepted documents must follow the governing versioning rules.
 
-Detailed operator tables, error codes, and test procedures belong in the specification and implementation plan. E2.6 consolidates shared examples and full-system verification; this Epic retains focused verification of conditional behavior.
+Detailed operator tables, error codes, and test procedures belong in the specification and implementation plan. Epic 6 consolidates shared examples and full-system verification; this Epic retains focused verification of conditional behavior.
 
 ## Non-goals
 

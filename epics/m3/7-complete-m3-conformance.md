@@ -1,16 +1,16 @@
-# E3.7: Complete M3 conformance
+# Epic 7: Complete M3 conformance
 
 Status: Planned
 
 Roadmap milestone: [M3: Durable runs and human control](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E3.1](e3-1-recover-durable-runs.md), [E3.2](e3-2-retry-bounded-failures.md), [E3.3](e3-3-pause-resume-and-cancel-runs.md), [E3.4](e3-4-wait-for-human-decisions.md), [E3.5](e3-5-inspect-run-timelines.md), and [E3.6](e3-6-retrieve-run-artifacts.md)
+Depends on: [Epic 1](1-recover-durable-runs.md), [Epic 2](2-retry-bounded-failures.md), [Epic 3](3-pause-resume-and-cancel-runs.md), [Epic 4](4-wait-for-human-decisions.md), [Epic 5](5-inspect-run-timelines.md), and [Epic 6](6-retrieve-run-artifacts.md)
 
 ## Outcome
 
 A contributor can demonstrate M3 with one repeatable command using the real Control API, daemon, durable store, and local artifact boundary. A run survives restart and reconnect, retries bounded failures, pauses and resumes at a recoverable point, waits for a human decision, exposes its timeline, and returns verifiable artifact evidence.
 
-This Epic consolidates evidence. It does not define a second execution model or replace the focused checks owned by E3.1 through E3.6.
+This Epic consolidates evidence. It does not define a second execution model or replace the focused checks owned by Epics 1 through 6.
 
 ## Scope
 
@@ -18,7 +18,7 @@ This Epic consolidates evidence. It does not define a second execution model or 
 
 - Build a shared fixture catalog from the capability Epics. Each fixture records its workflow publication, inputs, controlled interruption point, expected run projection, attempts, commands, decisions, events, artifacts, and terminal result.
 - Exercise durable acceptance and a lost invocation response. Repeat an identical invocation with its idempotency key and verify one run; reuse the key with changed inputs and verify a conflict without execution.
-- Stop and restart the daemon at each checkpoint boundary selected by E3.1, including before handler start, during an active handler, after handler return but before outcome commit, and after outcome commit. Verify committed progress, interrupted attempts, no duplicate requests, and deterministic recovery.
+- Stop and restart the daemon at each checkpoint boundary selected by Epic 1, including before handler start, during an active handler, after handler return but before outcome commit, and after outcome commit. Verify committed progress, interrupted attempts, no duplicate requests, and deterministic recovery.
 - Exercise sequential, conditional, parallel, and bounded-loop behavior after recovery. Preserve M2's selected paths, joins, iteration ordering, captured errors, failure draining, worker capacity, and concurrent-run independence.
 - Exercise retry success, retry exhaustion, pending retry recovery, and races between retry readiness and operator commands. Verify attempts and failure classification rather than relying on log text or timing sleeps.
 - Exercise pause, resume, and cancellation through the Control API. Verify durable command identity, acknowledgement versus application, cooperative interruption, replacement attempts, cancellation boundaries, and command conflicts.
@@ -34,7 +34,7 @@ This Epic consolidates evidence. It does not define a second execution model or 
 
 ## Decisions and implementation ownership
 
-Define the fixture format, layer coverage, process controls, isolated database setup, synchronization mechanism, and command contract. Choose whether the full-service demonstration runs against a temporary Postgres database, a temporary schema with isolated credentials, or another supported local store based on E3.1's storage decision. The test environment must prove real persistence and must not silently fall back to process-local state.
+Define the fixture format, layer coverage, process controls, isolated database setup, synchronization mechanism, and command contract. Choose whether the full-service demonstration runs against a temporary Postgres database, a temporary schema with isolated credentials, or another supported local store based on Epic 1's storage decision. The test environment must prove real persistence and must not silently fall back to process-local state.
 
 Define which assertions belong to the workflow validator, runtime, daemon, durable store, Control API, and artifact boundary. Transport-specific status codes may differ where the public contract permits, but the accepted workflow, durable records, and observable execution outcome must agree. Add focused regression tests only where a plausible durable behavior could regress; do not duplicate every fixture across every layer.
 

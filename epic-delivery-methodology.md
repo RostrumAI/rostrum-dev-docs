@@ -82,26 +82,26 @@ M2 is delivered through these technical Epics:
 
 | Epic | Technical outcome | Independent acceptance |
 | --- | --- | --- |
-| E2.1: Establish the daemon network boundary | Run independently configured Control API and daemon services over private authenticated HTTP, with both using the same Postgres database through `packages/database`; move backend services to `apis/` | Focused service checks prove authenticated requests, readiness, errors, and independent shutdown; E2.6 owns the automated separate-network environment |
-| E2.2: Execute sequential workflows | Invoke a selected publication, follow its sequence, and inspect each run's progress and outcome | Accepted runs continue after client disconnect and remain independent, including concurrent invocations of the same publication |
-| E2.3: Execute conditional workflows | Select one path from declared conditions and show which work was selected or excluded | A pricing scenario produces the correct result on each path; invalid conditions remain distinguishable from false conditions |
-| E2.4: Execute parallel paths and joins | Combine independent work within a run while sharing worker capacity across runs | Joins wait for successful paths, results do not depend on completion order, and busy runs do not starve other eligible runs |
-| E2.5: Execute bounded loops | Process items in order with author-selected iteration error handling | Fail-fast prevents later iterations; permitted error capture preserves the failed item's position and allows later items to run |
-| E2.6: Complete M2 conformance | Demonstrate consistent M2 behavior across execution layers and real services | One command proves the combined constructs, shared storage and secure network access, concurrent runs, client disconnect, and cleanup |
+| M2 Epic 1: Establish the daemon network boundary | Run independently configured Control API and daemon services over private authenticated HTTP, with both using the same Postgres database through `packages/database`; move backend services to `apis/` | Focused service checks prove authenticated requests, readiness, errors, and independent shutdown; M2 Epic 6 owns the automated separate-network environment |
+| M2 Epic 2: Execute sequential workflows | Invoke a selected publication, follow its sequence, and inspect each run's progress and outcome | Accepted runs continue after client disconnect and remain independent, including concurrent invocations of the same publication |
+| M2 Epic 3: Execute conditional workflows | Select one path from declared conditions and show which work was selected or excluded | A pricing scenario produces the correct result on each path; invalid conditions remain distinguishable from false conditions |
+| M2 Epic 4: Execute parallel paths and joins | Combine independent work within a run while sharing worker capacity across runs | Joins wait for successful paths, results do not depend on completion order, and busy runs do not starve other eligible runs |
+| M2 Epic 5: Execute bounded loops | Process items in order with author-selected iteration error handling | Fail-fast prevents later iterations; permitted error capture preserves the failed item's position and allows later items to run |
+| M2 Epic 6: Complete M2 conformance | Demonstrate consistent M2 behavior across execution layers and real services | One command proves the combined constructs, shared storage and secure network access, concurrent runs, client disconnect, and cleanup |
 
-The Epics introduce behavior in dependency order. E2.2 establishes run identity, progress, data flow, and results. E2.3 through E2.5 extend execution with each control-flow construct while keeping the specification, validation, and runtime consistent. Their implementation plans supply detailed contracts and executable examples. E2.6 consolidates those examples and verifies the whole system rather than defining a different execution model.
+The Epics introduce behavior in dependency order. M2 Epic 2 establishes run identity, progress, data flow, and results. M2 Epics 3 through 5 extend execution with each control-flow construct while keeping the specification, validation, and runtime consistent. Their implementation plans supply detailed contracts and executable examples. M2 Epic 6 consolidates those examples and verifies the whole system rather than defining a different execution model.
 
 ### Current work mapping
 
 | Current work | Revised location |
 | --- | --- |
-| E2-S2 and E2-05 | E2.1 |
-| E2-S1, E2-03, E2-04, and the run-contract and sequential portions of E2-06, E2-07, E2-10, E2-11, and E2-12 | E2.2 |
-| Conditional portions of E2-07, E2-11, and E2-12 | E2.3 |
-| Parallel implementation portions of E2-08 | E2.4 |
-| Loop implementation portions of E2-09 | E2.5 |
-| Conformance and real-process demonstration portions of E2-08, E2-09, E2-11, and E2-12 | E2.6 |
-| E2-01 | E2.2 prerequisite or maintenance pull request |
+| E2-S2 and E2-05 | M2 Epic 1 |
+| E2-S1, E2-03, E2-04, and the run-contract and sequential portions of E2-06, E2-07, E2-10, E2-11, and E2-12 | M2 Epic 2 |
+| Conditional portions of E2-07, E2-11, and E2-12 | M2 Epic 3 |
+| Parallel implementation portions of E2-08 | M2 Epic 4 |
+| Loop implementation portions of E2-09 | M2 Epic 5 |
+| Conformance and real-process demonstration portions of E2-08, E2-09, E2-11, and E2-12 | M2 Epic 6 |
+| E2-01 | M2 Epic 2 prerequisite or maintenance pull request |
 | E2-02 | Closed when this methodology and migration are approved |
 
 ## Milestone 3: Durable runs and human control
@@ -110,15 +110,15 @@ M3 is delivered through seven technical Epics:
 
 | Epic | Technical outcome | Independent acceptance |
 | --- | --- | --- |
-| [E3.1: Recover durable runs](epics/m3/e3-1-recover-durable-runs.md) | Persist accepted runs and recover interrupted M2 execution | A run survives service restart, preserves committed work, and remains inspectable while the daemon is unavailable |
-| [E3.2: Retry bounded failures](epics/m3/e3-2-retry-bounded-failures.md) | Retry explicitly eligible failures within durable attempt limits | A retry succeeds or exhausts with every attempt visible and no unbounded repeat |
-| [E3.3: Pause, resume, and cancel runs](epics/m3/e3-3-pause-resume-and-cancel-runs.md) | Apply durable operator commands at recoverable execution boundaries | A caller can pause, resume, or cancel one run and distinguish request acceptance from applied execution |
-| [E3.4: Wait for human decisions](epics/m3/e3-4-wait-for-human-decisions.md) | Wait durably for one validated general decision and continue its selected path | A decision survives restart, accepts one response, and exposes its continuation and response |
-| [E3.5: Inspect run timelines](epics/m3/e3-5-inspect-run-timelines.md) | Expose committed per-run events through cursor-based retrieval | A reconnecting caller can read complete ordered history without a live daemon |
-| [E3.6: Retrieve run artifacts](epics/m3/e3-6-retrieve-run-artifacts.md) | Store and retrieve bounded immutable evidence with integrity metadata | A caller retrieves an artifact independently and verifies its producer, size, and digest |
-| [E3.7: Complete M3 conformance](epics/m3/e3-7-complete-m3-conformance.md) | Demonstrate the combined durable lifecycle through real services | One isolated command proves restart, retry, controls, decisions, timelines, artifacts, and M2 compatibility |
+| [M3 Epic 1: Recover durable runs](epics/m3/1-recover-durable-runs.md) | Persist accepted runs and recover interrupted M2 execution | A run survives service restart, preserves committed work, and remains inspectable while the daemon is unavailable |
+| [M3 Epic 2: Retry bounded failures](epics/m3/2-retry-bounded-failures.md) | Retry explicitly eligible failures within durable attempt limits | A retry succeeds or exhausts with every attempt visible and no unbounded repeat |
+| [M3 Epic 3: Pause, resume, and cancel runs](epics/m3/3-pause-resume-and-cancel-runs.md) | Apply durable operator commands at recoverable execution boundaries | A caller can pause, resume, or cancel one run and distinguish request acceptance from applied execution |
+| [M3 Epic 4: Wait for human decisions](epics/m3/4-wait-for-human-decisions.md) | Wait durably for one validated general decision and continue its selected path | A decision survives restart, accepts one response, and exposes its continuation and response |
+| [M3 Epic 5: Inspect run timelines](epics/m3/5-inspect-run-timelines.md) | Expose committed per-run events through cursor-based retrieval | A reconnecting caller can read complete ordered history without a live daemon |
+| [M3 Epic 6: Retrieve run artifacts](epics/m3/6-retrieve-run-artifacts.md) | Store and retrieve bounded immutable evidence with integrity metadata | A caller retrieves an artifact independently and verifies its producer, size, and digest |
+| [M3 Epic 7: Complete M3 conformance](epics/m3/7-complete-m3-conformance.md) | Demonstrate the combined durable lifecycle through real services | One isolated command proves restart, retry, controls, decisions, timelines, artifacts, and M2 compatibility |
 
-E3.1 establishes the durable source of truth and recovery rules. E3.2 through E3.6 add independent lifecycle capabilities while extending the same checkpoint and observation contracts. E3.7 composes them into one real-service demonstration. The Epics require implementation plans to resolve storage, schemas, interruption behavior, and test controls without prescribing a database, queue, artifact backend, or live subscription system in advance.
+M3 Epic 1 establishes the durable source of truth and recovery rules. M3 Epics 2 through 6 add independent lifecycle capabilities while extending the same checkpoint and observation contracts. M3 Epic 7 composes them into one real-service demonstration. The Epics require implementation plans to resolve storage, schemas, interruption behavior, and test controls without prescribing a database, queue, artifact backend, or live subscription system in advance.
 
 M3 is separate from later governance. A decision records a response and available caller identity, but does not assign approvers or send notifications. Operator controls affect one run, while human decisions are workflow steps.
 

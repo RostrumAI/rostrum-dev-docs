@@ -1,10 +1,10 @@
-# E3.5: Inspect run timelines
+# Epic 5: Inspect run timelines
 
 Status: Planned
 
 Roadmap milestone: [M3: Durable runs and human control](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E3.1](e3-1-recover-durable-runs.md)
+Depends on: [Epic 1](1-recover-durable-runs.md)
 
 ## Outcome
 
@@ -28,7 +28,7 @@ Resolve the event taxonomy, immutable fields, per-run sequencing, transaction re
 
 Define the behavior for unreadable event records, a malformed cursor, an event page whose storage disappears, and a partially committed artifact reference. Event retrieval must fail explicitly rather than reorder or invent history. Specify how sensitive invocation data and response payloads are represented; do not copy unrestricted source-system content into the timeline by default.
 
-[E3.1](e3-1-recover-durable-runs.md) owns checkpoint atomicity and storage selection. [E3.2](e3-2-retry-bounded-failures.md), [E3.3](e3-3-pause-resume-and-cancel-runs.md), and [E3.4](e3-4-wait-for-human-decisions.md) own the transitions whose events this Epic exposes. [E3.6](e3-6-retrieve-run-artifacts.md) owns artifact content integrity. Detailed event schemas, API pagination, and executable replay scenarios belong in implementation plans.
+[Epic 1](1-recover-durable-runs.md) owns checkpoint atomicity and storage selection. [Epic 2](2-retry-bounded-failures.md), [Epic 3](3-pause-resume-and-cancel-runs.md), and [Epic 4](4-wait-for-human-decisions.md) own the transitions whose events this Epic exposes. [Epic 6](6-retrieve-run-artifacts.md) owns artifact content integrity. Detailed event schemas, API pagination, and executable replay scenarios belong in implementation plans.
 
 ## Non-goals
 
