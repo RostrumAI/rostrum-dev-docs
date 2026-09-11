@@ -1,4 +1,4 @@
-# E2-S1 decision: Local execution semantics and runtime state
+# M2 decision: Local execution semantics and runtime state
 
 | Tracking | Value |
 | --- | --- |
@@ -10,7 +10,7 @@
 
 ## Decision
 
-This proposal would have the local daemon run an immutable, compiled execution plan using an in-memory state reducer. Callers would monitor execution progress through read-only views in the Control API. It is input to E2.2 through E2.5, not a statement that these rules are approved or implemented. The accepted workflow specification remains current until the owning Epic delivers its contract changes under the applicable versioning rules.
+This proposal would have the local daemon run an immutable, compiled execution plan using an in-memory state reducer. Callers would monitor execution progress through read-only views in the Control API. It is input to Epics 2 through 5, not a statement that these rules are approved or implemented. The accepted workflow specification remains current until the owning Epic delivers its contract changes under the applicable versioning rules.
 
 In this document, a committed output is an output that has passed validation and been recorded in the daemon's in-memory run state. Committing an iteration outcome also records its success or captured errors before the next iteration starts. Neither operation persists a run or survives daemon restart in M2; durable checkpoints belong to M3.
 
@@ -20,7 +20,7 @@ The proposed execution rules are:
 2. **Explicit result steps for workflow completion:** A workflow finishes successfully only when execution reaches an explicit `result` step. Step handlers and conditional branches cannot finish a workflow implicitly. Resolve the result step's `inputs` using ordinary literal and reference bindings; that resolved object is the final payload. The current interface has no top-level workflow output schema.
 3. **Engine-evaluated conditionals:** The execution engine evaluates conditional rules and selects which branch to execute based on step outputs. Step handlers only execute their own unit of work and return data; handlers never make routing decisions or return branch names.
 4. **Fan-out paths with a required join:** When a workflow splits into parallel paths, every path must reach one matching fan-in step. A path may contain a sequence of steps or a nested fan-out that rejoins before the outer fan-in. While a fan-out remains open, its paths cannot cross, end early, or contain a conditional. The matching fan-in can end the workflow as a `result` step or continue to another step. A conditional after the join must be a separate successor step.
-5. **Sequential bounded loops:** Loops process items in an array one at a time in collection order ($0, 1, \dots, n-1$). Iteration 1 starts only after iteration 0 finishes and its outcome is recorded. Each completed iteration produces one ordered result entry. The workflow configures whether an iteration error stops the loop or is captured so later iterations can run. Captured errors preserve their iteration position. E2.5 owns the exact configuration field and values, default, eligible error codes, success/error result schema, and downstream binding rules.
+5. **Sequential bounded loops:** Loops process items in an array one at a time in collection order ($0, 1, \dots, n-1$). Iteration 1 starts only after iteration 0 finishes and its outcome is recorded. Each completed iteration produces one ordered result entry. The workflow configures whether an iteration error stops the loop or is captured so later iterations can run. Captured errors preserve their iteration position. Epic 5 owns the exact configuration field and values, default, eligible error codes, success/error result schema, and downstream binding rules.
 6. **Strict step input and output contracts:** Every step type in the registry defines its required inputs, optional inputs, and an exact schema for its outputs. The engine validates outputs at runtime and rejects missing fields, extra fields, or unexpected data types.
 7. **Active step visibility (`currentSteps`):** The Control API exposes currently active work as a `currentSteps` list. Each entry shows the step ID, whether the step is waiting for an available worker (`ready`) or currently executing (`running`), and the loop iteration index if applicable. Within a run, step ID plus iteration index identifies an instance. Entries sort by step ID and then iteration index; this display order does not imply execution order.
 8. **Complete failure reporting:** A handler error first stops new work in the affected execution scope. An iteration drains its active handlers before a loop policy can capture eligible failures and continue. If an error is not captured, the run stops dispatching new steps, allows its currently running handlers to finish, and returns all observed unhandled failures sorted by step ID, iteration, error code, and document path. Captured iteration errors remain in loop results, not the run-level failure list.
@@ -29,7 +29,7 @@ The proposed execution rules are:
 
 ## Context
 
-Workflow format v1 defines the shape and validation of a workflow document, but it does not fully specify runtime behavior. This proposal is input to E2.2 through E2.5. Each Epic resolves and implements the part of the contract needed for its execution path.
+Workflow format v1 defines the shape and validation of a workflow document, but it does not fully specify runtime behavior. This proposal is input to Epics 2 through 5. Each Epic resolves and implements the part of the contract needed for its execution path.
 
 The execution model must satisfy four requirements:
 
@@ -55,7 +55,7 @@ The following table summarizes each specific choice by aspect.
 | Conditionals | Engine-evaluated by priority with mandatory `default` and explicit `next` targets | Makes branch selection total: every valid evaluation selects one successor instead of stalling or introducing a separate no-match failure. |
 | Parallel paths | Fan-out paths with one required join | Lets each path run a sequence or a properly nested fan-out while preventing crossing paths, early termination, and ambiguous workflow results. |
 | Post-join routing (Q18) | Fan-in step cannot own a conditional; routing uses a separate successor step | Keeps the join boundary explicit and makes the rule that an open fan-out cannot contain a conditional simple to validate. |
-| Loops | Sequential bounded iterations with workflow-configured error tolerance | Preserves collection order while letting the workflow choose whether an iteration error stops the loop or becomes part of its ordered output. E2.5 owns the policy and output schema. |
+| Loops | Sequential bounded iterations with workflow-configured error tolerance | Preserves collection order while letting the workflow choose whether an iteration error stops the loop or becomes part of its ordered output. Epic 5 owns the policy and output schema. |
 | Completion | Explicit `result` step required on every reachable workflow path | Makes the final payload the resolved result-step `inputs` object; no separate workflow output schema is implied. |
 | Step contracts | Explicit schemas for required inputs, optional inputs, and exact outputs | Catches data mapping errors early and prevents undeclared or malformed data from moving downstream. |
 | Run monitoring | `currentSteps` array showing ready and running step instances | Gives callers clear visibility into active work during parallel execution across worker pools. |
@@ -143,7 +143,7 @@ A step handler runs as a self-contained, isolated function that receives resolve
 
 ### Input binding rules
 
-1. **Required inputs:** The workflow step definition must define a binding for every required input expected by the handler schema. If a binding references a missing workflow input or a step output not yet validated and recorded, the binding fails with `run.binding.unresolved-reference` before that handler starts. E2.5 determines whether a body binding error is eligible for iteration capture; otherwise it is an unhandled run failure.
+1. **Required inputs:** The workflow step definition must define a binding for every required input expected by the handler schema. If a binding references a missing workflow input or a step output not yet validated and recorded, the binding fails with `run.binding.unresolved-reference` before that handler starts. Epic 5 determines whether a body binding error is eligible for iteration capture; otherwise it is an unhandled run failure.
 2. **Optional inputs:** If a step definition omits an optional input, the engine omits that key from the handler's input object; it does not insert `undefined` into JSON. If it explicitly provides a binding, that reference must resolve and its value must pass input validation. An unresolved optional binding follows the same error and scope rules as a required binding.
 3. **Static type checking:** The current v1 specification validates reference existence and ordering; producer/consumer type mismatches are advisory rather than blocking. Blocking JSON Schema compatibility checks would be a future versioned contract change, not an existing guarantee. Runtime input and output validation remain necessary.
 
@@ -184,7 +184,7 @@ The dependency array defines the readiness rule; the countdown is its runtime in
 * **Path boundaries:** Paths cannot cross or merge before $G$. They cannot end while the fan-out remains open.
 * **Join behavior:** Step $G$ may be a normal task or the selected path's `result` step. A normal task can continue sequentially after the join. If the workflow needs a conditional, $G$ must route to a separate successor step that owns it.
 * **Independent dispatch:** All path roots become ready when the split succeeds. The dispatcher executes them across available worker slots. For fixed inputs and successful handler outputs, variations in worker speed or completion order do not affect the joined values or final result. They can affect which failures are observed before dispatch stops.
-* **Capacity and fairness:** E2.4 requires a daemon-wide handler limit shared by all runs and nested paths. Waiting joins do not hold handler capacity. This proposal uses scheduling rounds: each eligible run gets a worker opportunity before another gets a second; newly ready runs join by the next round. The implementation plan specifies and verifies the scheduling bound. This assumes active handlers eventually settle and does not preempt them.
+* **Capacity and fairness:** Epic 4 requires a daemon-wide handler limit shared by all runs and nested paths. Waiting joins do not hold handler capacity. This proposal uses scheduling rounds: each eligible run gets a worker opportunity before another gets a second; newly ready runs join by the next round. The implementation plan specifies and verifies the scheduling bound. This assumes active handlers eventually settle and does not preempt them.
 * **Failed path:** Stop new work in the affected scope and settle its active handlers. Never release a success join whose path inputs are missing or invalid. Inside a loop, the failed scope is the iteration until capture is resolved. Outside a capturing loop, an unhandled error stops new work across the run.
 
 ### 4. Sequential bounded loops
@@ -194,7 +194,7 @@ The dependency array defines the readiness rule; the countdown is its runtime in
 * Iteration $k+1$ starts only after iteration $k$ finishes and commits its outcome. Only one iteration runs at a time.
 * Each successful iteration contributes one ordered entry to the loop's `results` array.
 * The workflow declares how the loop handles iteration errors. A fail-fast policy stops later iterations. An error-tolerant policy captures eligible errors at their iteration positions in `results` and continues.
-* E2.5 defines the policy field and values, the default, eligible error classes/codes, the success-or-error entry schema, and downstream binding. Captured errors stay in iteration results and do not appear in run-level `failures`. If all later work succeeds and reaches the workflow's `result` step, the run succeeds with `failures: []`.
+* Epic 5 defines the policy field and values, the default, eligible error classes/codes, the success-or-error entry schema, and downstream binding. Captured errors stay in iteration results and do not appear in run-level `failures`. If all later work succeeds and reaches the workflow's `result` step, the run succeeds with `failures: []`.
 * The loop's setup handler and collection checks occur before an iteration exists; their errors cannot become captured iteration entries. A failed iteration first stops new body work and drains active body handlers. Capture is permitted only when the policy covers every observed error. Otherwise the run stops and retains the iteration's observed failures.
 
 ### 5. Explicit result steps
@@ -238,7 +238,7 @@ The dependency array defines the readiness rule; the countdown is its runtime in
 
 ## Control API projection
 
-The Control API provides a read-only projection of the in-memory execution state. E2.2 proposes internal `stopping` as a drain state, projected as public `running` until all active handlers settle; the public status then becomes `failed`. The lifecycle tables above describe internal states, not an additional public status.
+The Control API provides a read-only projection of the in-memory execution state. M2 Epic 2 proposes internal `stopping` as a drain state, projected as public `running` until all active handlers settle; the public status then becomes `failed`. The lifecycle tables above describe internal states, not an additional public status.
 
 The proposed API below uses `publicationNumber` for the execution-facing publication identity. Document compatibility remains governed by the workflow format specification; no separate execution version is introduced. A semantic version such as `"1.0.0"` is not the publication identity. Step labels below are readable aliases for step IDs.
 
@@ -285,13 +285,13 @@ The proposed API below uses `publicationNumber` for the execution-facing publica
 
 These proposed semantics require changes to the current workflow format. They do not replace accepted rules by publication of this decision record. The owning Epic must resolve specification versioning, update types, schemas and validation, and implement the matching runtime behavior:
 
-| Area | Current workflow rule | Proposed E2-S1 execution rule | Owning Epic |
+| Area | Current workflow rule | Proposed execution rule | Owning Epic |
 | --- | --- | --- | --- |
-| Conditionals | Branches without `next` can finish a workflow implicitly | Every branch and default rule specifies an explicit `next` step | E2.3 updates completion and conditional validation together. |
-| Conditional priorities | Priorities are numeric without uniqueness enforcement | Branch priorities are unique | E2.3 updates the validator and runtime together. |
-| Parallel paths | Multiple successors and dependency-based joins, without a required matching-join structure | Each split has one matching join, including nested paths; roots become ready together and start subject to capacity | E2.4 updates topology, dependency reachability, termination, scheduling, and failure-scope rules together. |
-| Loops | Bounded array iteration and collected terminal outputs; error-policy configuration and result variants are undefined | Sequential iterations with workflow-configured capture and ordered success/error entries | E2.5 defines configuration, default, eligible codes, exact result schema, bindings, and run-level failure treatment. |
-| Terminal results | Top-level terminal steps must be `result`, but conditional branches can end the run without an explicit result step | Explicit `result` step required on every reachable workflow path; loop body terminals supply iteration values | E2.2 defines result execution. E2.3 removes implicit conditional completion, and E2.5 defines iteration completion. |
+| Conditionals | Branches without `next` can finish a workflow implicitly | Every branch and default rule specifies an explicit `next` step | M2 Epic 3 updates completion and conditional validation together. |
+| Conditional priorities | Priorities are numeric without uniqueness enforcement | Branch priorities are unique | M2 Epic 3 updates the validator and runtime together. |
+| Parallel paths | Multiple successors and dependency-based joins, without a required matching-join structure | Each split has one matching join, including nested paths; roots become ready together and start subject to capacity | Epic 4 updates topology, dependency reachability, termination, scheduling, and failure-scope rules together. |
+| Loops | Bounded array iteration and collected terminal outputs; error-policy configuration and result variants are undefined | Sequential iterations with workflow-configured capture and ordered success/error entries | Epic 5 defines configuration, default, eligible codes, exact result schema, bindings, and run-level failure treatment. |
+| Terminal results | Top-level terminal steps must be `result`, but conditional branches can end the run without an explicit result step | Explicit `result` step required on every reachable workflow path; loop body terminals supply iteration values | M2 Epic 2 defines result execution. M2 Epic 3 removes implicit conditional completion, and M2 Epic 5 defines iteration completion. |
 
 ## M3 persistence and idempotency handoff
 
@@ -301,7 +301,7 @@ These proposed semantics require changes to the current workflow format. They do
 
 ## Example execution traces
 
-These traces illustrate the proposal; they are not evidence that the production runtime implements it. The linked migration-revision proof above remains the historical evidence. Loop result notation below shows successful values only; E2.5 must define the exact success/error entry shape before implementation.
+These traces illustrate the proposal; they are not evidence that the production runtime implements it. The linked migration-revision proof above remains the historical evidence. Loop result notation below shows successful values only; Epic 5 must define the exact success/error entry shape before implementation.
 
 ### Scenario 1: Sequential success
 
@@ -372,7 +372,7 @@ Workflow: LoopStep (items: [10, 20, 30], maxIterations: 5) -> Result
    - Variable item = 30.
    - Body executes -> outputs { "doubled": 60 }.
    - Iteration 2 output validated and recorded in memory.
-5. LoopStep records ordered successful values [{ "doubled": 20 }, { "doubled": 40 }, { "doubled": 60 }] in the result-entry schema to be defined by E2.5.
+5. LoopStep records ordered successful values [{ "doubled": 20 }, { "doubled": 40 }, { "doubled": 60 }] in the result-entry schema to be defined by Epic 5.
 6. 'result' step maps results.
 7. Run SUCCEEDED.
 ```

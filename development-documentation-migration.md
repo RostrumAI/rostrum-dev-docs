@@ -73,12 +73,12 @@ The human-readable `docs/specs/workflow-interface-v1.md` moves to `rostrum-dev-d
 
 Replace the current broad Epic 2 with roadmap milestone M2 and six technical Epics:
 
-1. E2.1: Establish the daemon network boundary.
-2. E2.2: Execute sequential workflows.
-3. E2.3: Execute conditional workflows.
-4. E2.4: Execute parallel paths and joins.
-5. E2.5: Execute bounded loops.
-6. E2.6: Complete M2 conformance.
+- [M2 Epic 1: Establish the daemon network boundary](epics/m2/1-establish-daemon-network-boundary.md).
+- [M2 Epic 2: Execute sequential workflows](epics/m2/2-execute-sequential-workflows.md).
+- [M2 Epic 3: Execute conditional workflows](epics/m2/3-execute-conditional-workflows.md).
+- [M2 Epic 4: Execute parallel paths and joins](epics/m2/4-execute-parallel-paths-and-joins.md).
+- [M2 Epic 5: Execute bounded loops](epics/m2/5-execute-bounded-loops.md).
+- [M2 Epic 6: Complete M2 conformance](epics/m2/6-complete-m2-conformance.md).
 
 The detailed mapping from current work is in [Epic delivery methodology](epic-delivery-methodology.md). Execution contracts move with the first Epic that implements each behavior instead of forming a separate upfront Epic.
 
@@ -86,9 +86,17 @@ Close E2-02 when this methodology and migration are approved. Create one or more
 
 ### M3: Durable runs and human control
 
-Treat the current Epic 3 as roadmap milestone M3. Split it into technical Epics after M2 establishes stable execution, handler, daemon, and Control API contracts.
+M3 is now split into seven technical Epics:
 
-Do not migrate the existing Epic 3 task files as plans. Use them as source material when the technical Epics are written against the implemented repository.
+- [M3 Epic 1: Recover durable runs](epics/m3/1-recover-durable-runs.md).
+- [M3 Epic 2: Retry bounded failures](epics/m3/2-retry-bounded-failures.md).
+- [M3 Epic 3: Pause, resume, and cancel runs](epics/m3/3-pause-resume-and-cancel-runs.md).
+- [M3 Epic 4: Wait for human decisions](epics/m3/4-wait-for-human-decisions.md).
+- [M3 Epic 5: Inspect run timelines](epics/m3/5-inspect-run-timelines.md).
+- [M3 Epic 6: Retrieve run artifacts](epics/m3/6-retrieve-run-artifacts.md).
+- [M3 Epic 7: Complete M3 conformance](epics/m3/7-complete-m3-conformance.md).
+
+M2 supplies the stable execution, handler, daemon, and Control API contracts. The M3 Epics require implementation plans to resolve storage, checkpoint, interruption, and API details against the implemented repository. They do not migrate the old Epic 3 task files as plans.
 
 ### M4 through M13
 

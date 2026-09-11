@@ -1,10 +1,10 @@
-# E2.2: Execute sequential workflows
+# Epic 2: Execute sequential workflows
 
 Status: Planned
 
 Roadmap milestone: [M2: Local workflow execution](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E2.1](e2-1-establish-daemon-network-boundary.md), [Workflow format v1](../../specifications/workflow-interface-v1.md), its validator, and immutable workflow publications
+Depends on: [Epic 1](1-establish-daemon-network-boundary.md), [Workflow format v1](../../specifications/workflow-interface-v1.md), its validator, and immutable workflow publications
 
 ## Outcome
 
@@ -36,7 +36,7 @@ A caller can distinguish these run states:
 
 The engine also tracks a stopping phase after an unhandled failure: it starts no new work while already running handlers finish. The public run remains running during this phase, with the observed failures and unfinished work available for inspection. It becomes failed when that work finishes.
 
-Step state explains what happened within the run. Pending steps have not become eligible; ready steps can execute but are waiting for capacity; running steps have started; succeeded steps have validated outputs; failed steps have an execution error. Run inspection must expose these distinctions for active and completed steps while the run remains available in memory. E2.3 adds the distinction between unselected steps and failed work.
+Step state explains what happened within the run. Pending steps have not become eligible; ready steps can execute but are waiting for capacity; running steps have started; succeeded steps have validated outputs; failed steps have an execution error. Run inspection must expose these distinctions for active and completed steps while the run remains available in memory. Epic 3 adds the distinction between unselected steps and failed work.
 
 The active-work list, `currentSteps`, shows ready and running steps rather than the last completed step or the whole graph. Completed runs have no active work. Its display order is consistent, but it does not imply that separate runs execute in one fixed order. Durable history across daemon restarts belongs to M3.
 
@@ -51,9 +51,9 @@ The active-work list, `currentSteps`, shows ready and running steps rather than 
 
 ## Specification and implementation ownership
 
-[Workflow format v1](../../specifications/workflow-interface-v1.md) defines the accepted workflow document. [E2-S1](../../decisions/m2/e2-s1-local-execution-semantics.md) contains proposed execution semantics. This Epic establishes the sequential behavior above and keeps the specification, validation, daemon, and APIs consistent. Changes that affect accepted documents must follow the governing versioning rules.
+[Workflow format v1](../../specifications/workflow-interface-v1.md) defines the accepted workflow document. [M2 execution decision](../../decisions/m2/local-execution-semantics.md) contains proposed execution semantics. This Epic establishes the sequential behavior above and keeps the specification, validation, daemon, and APIs consistent. Changes that affect accepted documents must follow the governing versioning rules.
 
-Implementation plans select the deterministic operations, define data and error shapes, and provide executable workflows and verification procedures. Those details are not an operation catalog in this Epic. E2.3 owns conditional completion; E2.4 adds parallel scheduling and failure handling; E2.6 consolidates reusable testing infrastructure without becoming a prerequisite for this Epic's focused checks.
+Implementation plans select the deterministic operations, define data and error shapes, and provide executable workflows and verification procedures. Those details are not an operation catalog in this Epic. Epic 3 owns conditional completion; Epic 4 adds parallel scheduling and failure handling; Epic 6 consolidates reusable testing infrastructure without becoming a prerequisite for this Epic's focused checks.
 
 ## Non-goals
 

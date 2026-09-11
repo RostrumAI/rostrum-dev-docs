@@ -1,10 +1,10 @@
-# E2.5: Execute bounded loops
+# Epic 5: Execute bounded loops
 
 Status: Planned
 
 Roadmap milestone: [M2: Local workflow execution](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E2.4](e2-4-execute-parallel-paths-and-joins.md)
+Depends on: [Epic 4](4-execute-parallel-paths-and-joins.md)
 
 ## Outcome
 
@@ -36,9 +36,9 @@ Captured errors belong to iteration results, not the run's unhandled-failure lis
 
 ## Specification and implementation ownership
 
-The [workflow specification](../../specifications/workflow-interface-v1.md) defines bounded collections but does not yet define loop error-policy configuration or success/error result entries. [E2-S1](../../decisions/m2/e2-s1-local-execution-semantics.md) proposes the execution model. This Epic settles those rules and keeps authoring validation, execution, and inspection consistent under the governing versioning rules.
+The [workflow specification](../../specifications/workflow-interface-v1.md) defines bounded collections but does not yet define loop error-policy configuration or success/error result entries. [M2 execution decision](../../decisions/m2/local-execution-semantics.md) proposes the execution model. This Epic settles those rules and keeps authoring validation, execution, and inspection consistent under the governing versioning rules.
 
-The implementation plan supplies policy field names and values, exact result schemas, error-code eligibility, handler choices, executable workflows, and verification procedures. E2.6 consolidates those examples into the shared catalog rather than requiring a separate catalog here.
+The implementation plan supplies policy field names and values, exact result schemas, error-code eligibility, handler choices, executable workflows, and verification procedures. Epic 6 consolidates those examples into the shared catalog rather than requiring a separate catalog here.
 
 ## Non-goals
 
