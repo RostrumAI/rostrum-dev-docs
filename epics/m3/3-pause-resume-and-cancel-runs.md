@@ -1,10 +1,10 @@
-# E3.3: Pause, resume, and cancel runs
+# Epic 3: Pause, resume, and cancel runs
 
 Status: Planned
 
 Roadmap milestone: [M3: Durable runs and human control](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E3.1](e3-1-recover-durable-runs.md) and [E3.2](e3-2-retry-bounded-failures.md)
+Depends on: [Epic 1](1-recover-durable-runs.md) and [Epic 2](2-retry-bounded-failures.md)
 
 ## Outcome
 
@@ -47,7 +47,7 @@ Resolve command identity and scope, ordering, duplicate behavior, caller identit
 
 The implementation must choose the smallest control mechanism compatible with the durable store and one-daemon deployment. Do not add a distributed command bus, leader election, or general task cancellation framework. Define whether command records live in the same authoritative store as run checkpoints and how the daemon observes them without creating a second source of truth.
 
-[E3.1](e3-1-recover-durable-runs.md) owns durable recovery and shared storage. [E3.2](e3-2-retry-bounded-failures.md) owns retry policy; this Epic owns their race and precedence. [E3.4](e3-4-wait-for-human-decisions.md) owns workflow decision waits. Extend the Control API only after these command semantics are defined. Detailed command shapes, interruption interfaces, and scenarios belong in implementation plans.
+[Epic 1](1-recover-durable-runs.md) owns durable recovery and shared storage. [Epic 2](2-retry-bounded-failures.md) owns retry policy; this Epic owns their race and precedence. [Epic 4](4-wait-for-human-decisions.md) owns workflow decision waits. Extend the Control API only after these command semantics are defined. Detailed command shapes, interruption interfaces, and scenarios belong in implementation plans.
 
 ## Non-goals
 

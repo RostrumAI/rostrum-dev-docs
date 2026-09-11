@@ -1,10 +1,10 @@
-# E3.2: Retry bounded failures
+# Epic 2: Retry bounded failures
 
 Status: Planned
 
 Roadmap milestone: [M3: Durable runs and human control](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E3.1](e3-1-recover-durable-runs.md)
+Depends on: [Epic 1](1-recover-durable-runs.md)
 
 ## Outcome
 
@@ -24,9 +24,9 @@ A workflow can retry an eligible step failure within an explicit limit. Callers 
 
 Resolve policy placement, validation, failure classification, attempt limits and defaults, and the minimum scheduling behavior required for bounded retries. A delayed retry does not require a general timer node or a catalog of backoff strategies. Define which execution errors cannot sensibly be retried, including invalid data or graph evaluation, rather than treating every error as transient.
 
-Specify precedence between retries and loop error capture, and between pending retries and run failure. [E3.3](e3-3-pause-resume-and-cancel-runs.md) owns command precedence and adds the corresponding retry/control recovery behavior; no retry may bypass an effective pause or cancellation.
+Specify precedence between retries and loop error capture, and between pending retries and run failure. [Epic 3](3-pause-resume-and-cancel-runs.md) owns command precedence and adds the corresponding retry/control recovery behavior; no retry may bypass an effective pause or cancellation.
 
-Extend the [workflow specification](../../specifications/workflow-interface-v1.md#breaking-and-additive-changes), validation, runtime, durable records, and APIs together. Follow the governing compatibility rules instead of changing the failure behavior of existing publications implicitly. Record retry transitions and their events consistently with E3.1. Implementation plans define policy fields, error codes, scheduling details, and executable checks. This Epic owns focused retry verification; [E3.7](e3-7-complete-m3-conformance.md) consolidates the full-system evidence.
+Extend the [workflow specification](../../specifications/workflow-interface-v1.md#breaking-and-additive-changes), validation, runtime, durable records, and APIs together. Follow the governing compatibility rules instead of changing the failure behavior of existing publications implicitly. Record retry transitions and their events consistently with Epic 1. Implementation plans define policy fields, error codes, scheduling details, and executable checks. This Epic owns focused retry verification; [Epic 7](7-complete-m3-conformance.md) consolidates the full-system evidence.
 
 ## Non-goals
 

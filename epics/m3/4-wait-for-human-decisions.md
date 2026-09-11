@@ -1,10 +1,10 @@
-# E3.4: Wait for human decisions
+# Epic 4: Wait for human decisions
 
 Status: Planned
 
 Roadmap milestone: [M3: Durable runs and human control](../../strategy/product-roadmap.md#3-delivery-milestones)
 
-Depends on: [E3.1](e3-1-recover-durable-runs.md) and [E3.3](e3-3-pause-resume-and-cancel-runs.md)
+Depends on: [Epic 1](1-recover-durable-runs.md) and [Epic 3](3-pause-resume-and-cancel-runs.md)
 
 ## Outcome
 
@@ -41,7 +41,7 @@ Resolve the step name and document shape, outcome-to-target representation, resp
 
 Resolve how the durable store atomically records request creation, response submission, selected continuation, and downstream bindings. The design must work while the daemon is unavailable and must not require a notification service, user directory, approver policy, or live subscription. Those capabilities belong to later governance and integration work.
 
-[E3.1](e3-1-recover-durable-runs.md) owns checkpoint and storage behavior. [E3.3](e3-3-pause-resume-and-cancel-runs.md) owns cancellation and the rule that operator resume cannot bypass this wait. [E3.5](e3-5-inspect-run-timelines.md) and [E3.6](e3-6-retrieve-run-artifacts.md) own general observation and evidence retrieval. Extend the workflow specification and Control API together under its versioning rules. Detailed schemas, endpoint bodies, and executable examples belong in implementation plans.
+[Epic 1](1-recover-durable-runs.md) owns checkpoint and storage behavior. [Epic 3](3-pause-resume-and-cancel-runs.md) owns cancellation and the rule that operator resume cannot bypass this wait. [Epic 5](5-inspect-run-timelines.md) and [Epic 6](6-retrieve-run-artifacts.md) own general observation and evidence retrieval. Extend the workflow specification and Control API together under its versioning rules. Detailed schemas, endpoint bodies, and executable examples belong in implementation plans.
 
 ## Non-goals
 
