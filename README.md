@@ -61,4 +61,6 @@ Durable decisions are under `decisions/`. Research remains under `research/` onl
 
 ## Plans
 
-Create `plans/` when an implementation plan becomes active. A plan covers one scoped workstream within one technical Epic. Delete it after completion once durable information has moved into code, an Epic, a specification, or a decision record. Git history retains the completed plan.
+A plan covers one scoped workstream within one technical Epic. Delete it after completion once durable information has moved into code, an Epic, a specification, or a decision record. Git history retains the completed plan.
+
+- [M2 Epic 1: Implement the daemon network boundary](plans/m2-epic-1-daemon-network-boundary.md) — proposed implementation plan.
