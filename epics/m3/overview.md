@@ -41,30 +41,35 @@ verification of its addition. Epic 7 consolidates their evidence.
 
 ## Implementation order
 
-The declared dependency chain is:
+### Dependency chain
 
-1. Epic 1, durable runs and recovery. Every other Epic extends the records it defines.
-2. Epic 2, retries, which depend on durable attempts and checkpoints.
-3. Epic 3, pause, resume, and cancellation, which depend on Epics 1 and 2 and own their precedence against retry readiness.
-4. Epic 4, human decisions, which depend on Epics 1 and 3.
-5. Epic 5, run timelines, which depend on Epic 1.
-6. Epic 6, run artifacts, which depend on Epics 1 and 5.
-7. Epic 7, conformance, which depends on Epics 1 through 6.
+| Epic | Depends on |
+| --- | --- |
+| 1. Recover durable runs | — |
+| 2. Retry bounded failures | Epic 1 |
+| 3. Pause, resume, and cancel runs | Epics 1, 2 |
+| 4. Wait for human decisions | Epics 1, 3 |
+| 5. Inspect run timelines | Epic 1 |
+| 6. Retrieve run artifacts | Epics 1, 5 |
+| 7. Conformance | Epics 1 through 6 |
 
-Epic 1 is the shared foundation and comes first. After it, two chains can
-proceed at the same time:
+Epic 1 establishes the durable source of truth and comes first. It owns the
+storage decision and the record schema, and every other Epic extends those
+records, so settle the schema before the chains below separate.
 
-- **Lifecycle control.** Epics 2, 3, and 4: retries, then operator commands,
-  then decision waits. Each depends on the previous one, so this chain is
-  serial.
-- **Observation and evidence.** Epics 5 and 6: the timeline, then artifacts.
-  The timeline's event store, ordering, and pagination contract can be built
-  alongside Epics 2 through 4. Exposing their transitions as events is the
-  integration step.
+### Parallel workstreams
 
-Both chains extend the durable records Epic 1 defines and must preserve its
-checkpoint atomicity, so the record schema is the shared interface to settle
-before the chains separate. Epic 7 follows both chains.
+| Workstream | Requires | Does not touch |
+| --- | --- | --- |
+| Lifecycle control: retries, then commands, then decisions (Epics 2, 3, 4) | Epic 1's durable records and checkpoint atomicity | The event store and the artifact boundary |
+| Observation and evidence: timeline, then artifacts (Epics 5, 6) | Epic 1's durable records and the Epic 5 event contract | Retry, command, and decision transitions |
+
+The two chains are independent after Epic 1. The lifecycle chain is serial
+within itself: commands own their precedence against retry readiness, and
+decisions build on operator controls. The observation chain can be built
+alongside it, with exposing the lifecycle transitions as timeline events as the
+integration step. Epic 7 follows both chains and composes them into one
+real-service demonstration.
 
 ## Milestone exit
 

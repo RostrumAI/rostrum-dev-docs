@@ -40,38 +40,47 @@ system rather than defining a different execution model.
 
 ## Implementation order
 
-The declared dependency chain is:
+### Before implementation starts
 
-1. Epic 1, the daemon network boundary.
-2. Epic 2, sequential execution, which depends on Epic 1.
-3. Epic 3, conditionals, which depends on Epic 2.
-4. Epic 4, parallel paths and joins, which depends on Epic 3.
-5. Epic 5, bounded loops, which depends on Epic 4.
-6. Epic 6, conformance, which depends on Epic 5.
-
-That chain orders integration, not authoring. Two workstreams can proceed at
-the same time while remaining consistent with it:
-
-- **Epic 1 and Epic 2.** The service boundary and the execution engine share
-  only the daemon HTTP contract. Freezing that contract in advance lets both
-  proceed, and lets Epic 2 be developed against a fake in-process transport.
-- **Epic 6 infrastructure.** The fixture catalog format, the demonstration
-  command, and the separate-network environment do not depend on engine
-  internals. Earlier Epics supply the fixtures that the catalog consumes.
-
-Within the execution Epics, the specification, validation, and pure semantics
-of a later construct can be authored before its predecessor's runtime
-integration, because they do not modify the engine's state machine. For
-example, the condition value and operator rules of Epic 3 can be implemented
-and tested with unit fixtures while Epic 2's runner is still being completed.
-Only the engine transitions themselves are serial.
-
-Before implementation starts, resolve the status of the
-[M2 execution decision](../../decisions/m2/local-execution-semantics.md). Epics
-2 through 5 implement the semantics it proposes, and it is currently input
-rather than an approved contract. Any restriction it places on documents the
-workflow specification accepts today must follow the specification's
+Epics 2 through 5 implement the semantics proposed by the
+[M2 execution decision](../../decisions/m2/local-execution-semantics.md), which
+is input rather than an approved contract. Resolve its status first. Any
+restriction it places on documents the workflow format specification accepts
+today must follow that specification's
 [versioning rules](../../specifications/workflow-interface-v1.md#breaking-and-additive-changes).
+
+### Dependency chain
+
+| Epic | Depends on |
+| --- | --- |
+| 1. Daemon network boundary | — |
+| 2. Sequential execution | Epic 1 |
+| 3. Conditionals | Epic 2 |
+| 4. Parallel paths and joins | Epic 3 |
+| 5. Bounded loops | Epic 4 |
+| 6. Conformance | Epic 5 |
+
+These dependencies order integration, not authoring. Epics 2 through 5 extend
+one engine state machine, so their engine transitions are serial. Specification
+rules, validation, and pure semantics do not touch that state machine and can be
+written ahead of the Epic that integrates them. For example, Epic 3's condition
+value and operator rules can be implemented and tested with unit fixtures while
+Epic 2's runner is still being completed.
+
+### Parallel workstreams
+
+| Workstream | Requires | Does not touch |
+| --- | --- | --- |
+| Epic 1 service boundary | The frozen daemon HTTP contract | Engine internals |
+| Epic 2 execution engine | The frozen daemon HTTP contract | Service configuration |
+| Epic 6 conformance infrastructure | The frozen fixture catalog format | Engine internals |
+| A later Epic's specification rules, validation, and pure semantics | Its predecessor's contract | The engine state machine |
+
+The daemon HTTP contract is the only seam between Epics 1 and 2; freezing it
+before either starts lets both proceed, and lets Epic 2 run against a fake
+in-process transport. Epic 6 builds the fixture catalog, the demonstration
+command, and the separate-network environment, while earlier Epics supply the
+fixtures it consumes.
 
 ## Milestone exit
 
