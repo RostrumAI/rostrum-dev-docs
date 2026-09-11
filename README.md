@@ -40,7 +40,7 @@ M2 is the active roadmap milestone. M3 remains a roadmap milestone until M2 cont
 
 ### Specifications
 
-- [Workflow interface v1](specifications/workflow-interface-v1.md)
+- [Workflow format v1](specifications/workflow-interface-v1.md)
 
 ### Decisions and research
 

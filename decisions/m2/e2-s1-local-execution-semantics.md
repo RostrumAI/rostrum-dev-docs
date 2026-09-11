@@ -16,7 +16,7 @@ In this document, a committed output is an output that has passed validation and
 
 The proposed execution rules are:
 
-1. **Exact invocation inputs:** To start a run, the caller must request an exact publication and supply every required input defined in `workflow.inputs`. The engine rejects requests that miss required inputs or include undeclared inputs before creating a run.
+1. **Exact invocation inputs:** To start a run, the caller selects an exact publication using `workflowId` and `publicationNumber` and supplies every required input defined in `workflow.inputs`. The engine rejects requests that miss required inputs or include undeclared inputs before creating a run. Publication naming follows the execution-facing publication contract; it does not introduce a separate execution version.
 2. **Explicit result steps for workflow completion:** A workflow finishes successfully only when execution reaches an explicit `result` step. Step handlers and conditional branches cannot finish a workflow implicitly. Resolve the result step's `inputs` using ordinary literal and reference bindings; that resolved object is the final payload. The current interface has no top-level workflow output schema.
 3. **Engine-evaluated conditionals:** The execution engine evaluates conditional rules and selects which branch to execute based on step outputs. Step handlers only execute their own unit of work and return data; handlers never make routing decisions or return branch names.
 4. **Fan-out paths with a required join:** When a workflow splits into parallel paths, every path must reach one matching fan-in step. A path may contain a sequence of steps or a nested fan-out that rejoins before the outer fan-in. While a fan-out remains open, its paths cannot cross, end early, or contain a conditional. The matching fan-in can end the workflow as a `result` step or continue to another step. A conditional after the join must be a separate successor step.
@@ -33,9 +33,9 @@ Workflow format v1 defines the shape and validation of a workflow document, but 
 
 The execution model must satisfy four requirements:
 
-1. **Daemon-owned execution:** The local daemon advances workflow execution independently of caller connections. Callers can disconnect immediately after starting a run without interrupting execution.
+1. **Daemon-owned execution:** The daemon advances workflow execution independently of caller connections. Every accepted invocation gets a separate run identity and mutable execution state, including concurrent invocations of the same publication. A client disconnect or execution failure in one run does not stop another. One daemon is a deployment limit, not a one-run-at-a-time restriction.
 2. **Deterministic results and routing:** Given the same inputs, workflow definition, and successful step handler outputs, branch selection and final outputs are identical. Dependencies constrain execution, but independent parallel handlers need not start or finish in the same global order. Failure lists have a stable order for the failures actually observed; capacity and timing can change which handlers start before an error stops dispatch.
-3. **Complete observability:** The Control API can project active and ready step instances (`currentSteps`) and all observed failures without hiding errors behind an arbitrary primary failure.
+3. **Complete observability:** The Control API shows active and ready steps through `currentSteps` and preserves completed step and iteration outcomes for inspection while the in-memory run exists. It reports all observed unhandled failures without choosing an arbitrary primary failure. Durable history across daemon restarts belongs to M3.
 4. **M3 compatibility:** In-memory state and transitions map directly to durable checkpoints and crash recovery without changing successful execution semantics.
 
 Comparative research across workflow engines remains in the [E2-S1 research at the migration revision](https://github.com/RostrumAI/rostrum/blob/4da89f6316abd44f6ef499a27b87c60aca35e610/docs/research/e2-s1-local-execution-semantics-options.md).
@@ -130,11 +130,11 @@ The engine validates invocation requests synchronously before creating a run.
 
 | Condition | Verification rule | Response / Outcome |
 | --- | --- | --- |
-| Publication | Must match an exact, immutable publication | If not found, rejects with `run.invocation.workflow-not-found` (HTTP 404). |
+| Publication | Must match an exact, immutable publication selected by workflow ID and publication number | If not found, rejects with `run.invocation.workflow-not-found` (HTTP 404). |
 | Missing input | Every input defined in `workflow.inputs` must be provided | If any are missing, rejects with `run.input.missing` (HTTP 400). |
 | Undeclared input | Invocation inputs must not contain extra fields outside `workflow.inputs` | If extra fields are present, rejects with `run.input.unknown` (HTTP 400). |
 | Input data types | Invocation input values must match their declared JSON Schema types | If any types mismatch, rejects with `run.input.type` (HTTP 400). |
-| Step handler availability | Every step type used in the workflow must be registered in the daemon for the declared workflow format version | If any handler is missing, rejects with `run.step.unsupported` (HTTP 400). |
+| Step handler availability | Every step type used in the publication must have an implementation available in the daemon | If any handler is missing, rejects with `run.step.unsupported` (HTTP 400). |
 | Valid request | Passes all checks above | Accepts request with HTTP 201; returns the run identity, exact publication identity, `status: "queued"`, `currentSteps: []`, `output: null`, and `failures: []`. |
 
 ## Handler contracts and output validation
@@ -184,7 +184,7 @@ The dependency array defines the readiness rule; the countdown is its runtime in
 * **Path boundaries:** Paths cannot cross or merge before $G$. They cannot end while the fan-out remains open.
 * **Join behavior:** Step $G$ may be a normal task or the selected path's `result` step. A normal task can continue sequentially after the join. If the workflow needs a conditional, $G$ must route to a separate successor step that owns it.
 * **Independent dispatch:** All path roots become ready when the split succeeds. The dispatcher executes them across available worker slots. For fixed inputs and successful handler outputs, variations in worker speed or completion order do not affect the joined values or final result. They can affect which failures are observed before dispatch stops.
-* **Capacity and fairness:** E2.4 defines a daemon-wide handler limit shared by all runs and nested paths. Waiting joins do not hold handler capacity. In a scheduling round, each eligible run gets a worker opportunity before another gets a second; newly ready runs join by the next round. This assumes active handlers eventually settle and does not preempt them.
+* **Capacity and fairness:** E2.4 requires a daemon-wide handler limit shared by all runs and nested paths. Waiting joins do not hold handler capacity. This proposal uses scheduling rounds: each eligible run gets a worker opportunity before another gets a second; newly ready runs join by the next round. The implementation plan specifies and verifies the scheduling bound. This assumes active handlers eventually settle and does not preempt them.
 * **Failed path:** Stop new work in the affected scope and settle its active handlers. Never release a success join whose path inputs are missing or invalid. Inside a loop, the failed scope is the iteration until capture is resolved. Outside a capturing loop, an unhandled error stops new work across the run.
 
 ### 4. Sequential bounded loops
@@ -240,7 +240,7 @@ The dependency array defines the readiness rule; the countdown is its runtime in
 
 The Control API provides a read-only projection of the in-memory execution state. E2.2 proposes internal `stopping` as a drain state, projected as public `running` until all active handlers settle; the public status then becomes `failed`. The lifecycle tables above describe internal states, not an additional public status.
 
-A semantic version such as `"1.0.0"` is not the publication identity. Step labels below are readable aliases for step IDs.
+The proposed API below uses `publicationNumber` for the execution-facing publication identity. Document compatibility remains governed by the workflow format specification; no separate execution version is introduced. A semantic version such as `"1.0.0"` is not the publication identity. Step labels below are readable aliases for step IDs.
 
 ```json
 {

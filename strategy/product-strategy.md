@@ -318,14 +318,14 @@ This order keeps collaboration and hosted scale from delaying the first useful, 
 
 ## 8. What technical Epics must resolve
 
-This strategy does not specify detailed screens, endpoint schemas, database tables, node-by-node behavior, model-provider prompts, the final state-storage implementation, specific Docker or microVM implementations, pricing, or implementation plans. The high-level direction for workflow JSON, explicit inputs, revisioned Git collaboration, per-node simulation, the Model Provider Layer, container-defined scripts, and visual authoring is decided. Technical Epics specify the required engineering outcomes and acceptance criteria.
+This strategy does not specify detailed screens, endpoint schemas, database tables, node-by-node behavior, model-provider prompts, the final state-storage implementation, specific Docker or microVM implementations, pricing, or implementation plans. The high-level direction for workflow JSON, explicit inputs, revisioned Git collaboration, per-node simulation, the Model Provider Layer, container-defined scripts, and visual authoring is decided. Technical Epics describe the product capabilities, governing constraints, and observable acceptance criteria. Specifications and implementation plans provide the detailed contracts and designs.
 
 Each technical Epic defines:
 
-- One coherent technical outcome.
+- One coherent product capability.
 - Scope and non-goals.
 - Inherited contracts and invariants.
-- Functional, failure, and safety requirements.
+- Functional, failure, and safety behavior, including technical states users need to understand or inspect.
 - Local, self-hosted, and cloud boundaries where relevant.
 - Dependencies, technical risks, and decisions that require approval.
 - Independently demonstrable acceptance criteria.

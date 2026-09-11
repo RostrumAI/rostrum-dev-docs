@@ -24,7 +24,7 @@ The JSON Schema 2020-12 document emitted from [`packages/workflow/src/schema.ts`
 
 ### Planned M2 execution work
 
-This specification describes the accepted document and publication rules, not a completed execution engine. [E2.2](../epics/m2/e2-2-execute-sequential-workflows.md) defines the deterministic handler catalog, run requests and state, bindings, and final result behavior. [E2.3](../epics/m2/e2-3-execute-conditional-workflows.md) specifies conditional operator types and explicit branch destinations. [E2.4](../epics/m2/e2-4-execute-parallel-paths-and-joins.md) specifies structured parallel paths and joins. [E2.5](../epics/m2/e2-5-execute-bounded-loops.md) defines loop error-policy configuration and ordered success-or-error results. Each Epic updates this specification and its executable schema, validator, and runtime together.
+This specification describes the accepted document and publication rules, not a completed execution engine. [E2.2](../epics/m2/e2-2-execute-sequential-workflows.md) establishes independent runs, progress, data flow, and final results. [E2.3](../epics/m2/e2-3-execute-conditional-workflows.md) adds conditional selection and resolves its comparison and completion rules. [E2.4](../epics/m2/e2-4-execute-parallel-paths-and-joins.md) adds structured parallel paths and joins. [E2.5](../epics/m2/e2-5-execute-bounded-loops.md) adds ordered iterations with configurable error handling. Their implementation plans define the detailed contracts and executable examples; each workstream keeps this specification, validation, and execution consistent.
 
 The [E2-S1 execution proposal](../decisions/m2/e2-s1-local-execution-semantics.md) is input to those Epics, not an override of the rules below. In particular, requiring explicit conditional destinations and restricting parallel graphs can reject documents accepted today. The owning Epic must apply the [versioning rules](#breaking-and-additive-changes) before introducing those restrictions.
 
@@ -330,7 +330,7 @@ v1 checks that each reference resolves to a declared input or output and that th
 
 ## Examples
 
-The example set lives in `packages/workflow/tests/fixtures/`, one file per document, organized as `valid/` (publishable), `incomplete/` (saveable drafts with blocking findings from stages 3 through 8), `invalid-shape/` (rejected by the interface-version stage or the document schema for one specific reason), and `invalid-parse/` (rejected at parse). Each non-valid fixture has a committed expected-findings manifest under `packages/workflow/tests/fixtures/expected/<category>/` that records the exact codes, blocking flags, JSON Pointers, related locations, details, and source locations the validator must return. Each valid example's digest vector is committed in [`digest-vectors.json`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/tests/fixtures/digest-vectors.json) and asserted by the workflow library tests.
+The example set lives in `packages/workflow/tests/fixtures/`, one file per document, organized as `valid/` (publishable), `incomplete/` (saveable drafts with blocking findings from stages 3 through 8), `invalid-shape/` (rejected by the format-version stage or the document schema for one specific reason), and `invalid-parse/` (rejected at parse). Each non-valid fixture has a committed expected-findings manifest under `packages/workflow/tests/fixtures/expected/<category>/` that records the exact codes, blocking flags, JSON Pointers, related locations, details, and source locations the validator must return. Each valid example's digest vector is committed in [`digest-vectors.json`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/tests/fixtures/digest-vectors.json) and asserted by the workflow library tests.
 
 ### Valid — sequential with terminal result
 
@@ -405,7 +405,7 @@ The remaining incomplete drafts each isolate one post-schema finding: an unfinis
 
 ### Invalid — unknown format version
 
-Fails validation because no rule set exists for `v2` in a release that ships only v1; it is never treated as v1. (`tests/fixtures/invalid-shape/unknown-interface-version.json`)
+Fails validation because no rule set exists for `v2` in a release that ships only v1; it is never treated as v1. (`tests/fixtures/invalid-shape/unknown-workflow-format-version.json`)
 
 ```json
 {
@@ -425,7 +425,7 @@ The remaining invalid-shape examples each isolate one rule: a missing required f
 - `tests/fixtures/invalid-shape/unknown-field.json`
 - `tests/fixtures/invalid-shape/malformed-uuid.json`
 - `tests/fixtures/invalid-shape/empty-steps.json`
-- `tests/fixtures/invalid-shape/missing-interface-version.json`
+- `tests/fixtures/invalid-shape/missing-workflow-format-version.json`
 - `tests/fixtures/invalid-shape/loop-bound-below-one.json`
 - `tests/fixtures/invalid-shape/loop-missing-collection.json`
 - `tests/fixtures/invalid-shape/conditional-default-missing.json`
