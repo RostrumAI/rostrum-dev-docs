@@ -73,8 +73,8 @@ Every agent-driven review uses a newly spawned subagent with no implementation-s
 - [x] Write this proposed plan; no runtime implementation or Epic acceptance is claimed.
 - [ ] Review the remaining readiness, reload, and shutdown mechanics against the owner's transport and token decisions.
 - [x] Complete checkpoint 1: runnable backend directory cutover (commit `ce935de`).
-- [ ] Complete checkpoint 2: independently runnable secure daemon and database boundary.
-- [ ] Complete checkpoint 3: Control API integration and bounded lifecycle.
+- [x] Complete checkpoint 2: independently runnable secure daemon and database boundary (PR #46; recorded below).
+- [x] Complete checkpoint 3: Control API integration and bounded lifecycle (PR #46; evidence recorded below, regression tests still outstanding).
 - [ ] Complete checkpoint 4: focused acceptance evidence and operator handoff.
 
 Record implementation pull requests and checkpoint evidence here as work proceeds.
@@ -97,6 +97,35 @@ Remaining `apps/control-api` strings are deliberate non-changes: historical PR-c
 Two pre-existing conditions surfaced, neither caused by this cutover and neither in checkpoint 1 scope: the committed `bun.lock` omitted the `trustedDependencies` block that root `package.json` declares, which the sanctioned `bun install` then syncs; and root `README.md` documents a `shutdown complete` line the process never logs. Checkpoint 4 owns the shutdown documentation, and checkpoint 3 owns lifecycle behavior.
 
 Independent review: a freshly spawned repository/tooling reviewer with no implementation-session context (`CutoverReviewer`) re-ran every acceptance command itself, byte-compared the moved tree against `main`, and confirmed the package name, route contract, and contract artifact are unchanged. It also verified that no re-export, symlink, or compatibility workspace remains under `apps/`, and that the CI command set is green. Verdict: approve, confidence 0.95, no findings. It additionally flagged scope prose in `.github/skills/code-review/rules/repository-conventions.md` that still described `apis/**` as a planned home; that prose is corrected in `ff67803`, leaving the reviewed cutover commit `ce935de` unmodified.
+
+### Checkpoints 2–3 evidence (2026-09-12)
+
+Branch `feat/m2-daemon-boundary`, commit `f850229`, PR #46. 60 files, +3929/−433. Adds `packages/server` (`@rostrum/server`), `apis/daemon`, the database handle contract, and the Control API integration.
+
+Integrated checks: `bun run check` (all five workspaces), `bun run lint` (231 files), `bun test` (**395 pass, 0 fail**), and both service smokes. The daemon smoke spawns the real `src/index.ts`, authenticates, verifies three-way OpenAPI parity, and confirms a bounded SIGTERM exit.
+
+Two real processes against one migrated disposable database:
+
+- Control API readiness returned `200 {"status":"ready","checks":{"database":{"status":"ok"},"daemon":{"status":"ok"}}}`: the daemon was reached over HTTP with its bearer token, each service probing the same database through its own pool.
+- Daemon readiness returned 200 when authenticated; missing or wrong credentials returned **401** with `WWW-Authenticate: Bearer` and `Cache-Control: no-store`.
+- With the daemon stopped, readiness returned `503` with `daemon_unavailable` in **0.9 ms** while liveness stayed 200 and `POST /api/workflows` still returned **201**, confirming both the first-known-failure rule and authoring isolation.
+- Token rotation by SIGHUP without restarting either process: the overlap set accepted both tokens; after retirement the old token returned **401** and the adopted token returned 200 with Control API readiness at 200.
+
+Three defects were found and fixed during integration, one of them material to a stated criterion:
+
+1. The Control API kept sending the **retired** token after a token-only reload, because readiness captured `config` when dependencies were built and token changes deliberately do not rebuild dependencies. Readiness now resolves from the request's configuration snapshot. This is exactly the criterion "subsequent requests, including keep-alive requests, use the new set".
+2. The database probe reported a connection failure as `database_timeout`: a supplied socket's connect-level failure never reaches postgres.js's error path. The probe now settles on the transport failure itself.
+3. `packages/database/src/client.test.ts` asserted that a connection to `127.0.0.2` is refused, which holds on Linux but not on macOS, where that address does not answer. The assertion therefore never demonstrated IP-SAN verification. The test now omits the IP SAN and proves rejection of an IP-literal connection to the same trusted server, which is deterministic on both platforms and tests the intended property.
+
+Outstanding at this commit, stated so reviews are not misled:
+
+- `packages/server/src/lifecycle.test.ts` and `reload.test.ts` are **not written**; lifecycle and reload behaviour was verified against real processes rather than by permanent regression tests.
+- Forced shutdown (bounded nonzero exit) and same-address listener replacement are implemented but unexercised.
+- No non-loopback evidence exists yet. All observation above is loopback on one host and must not be presented as separate-host proof; Epic 6 owns the reusable environment.
+- Fresh-subagent security, database, and concurrency reviews of checkpoints 2–3 have not run.
+- Operator documentation remains to be updated, including the root `README.md`, which still describes the pre-daemon configuration.
+
+Pre-existing, unrelated: the local Postgres volume reports `corrupted migrations: previously executed migration 001_drafts is missing`, because that migration was renamed to `001_workflows.ts`. Acceptance used a disposable database. Separately, the local OrbStack runtime was not running and had to be started before container work could proceed.
 
 ## Checkpoints
 
