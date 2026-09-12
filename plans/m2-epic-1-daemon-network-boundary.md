@@ -35,7 +35,7 @@ Paths in this section describe the implementation repository before relocation.
 | Deployment | `docker-compose.yml` provisions Postgres only; no service Dockerfiles or orchestration manifests exist | Update actual references and operator startup instructions; do not invent a production deployment stack |
 | Existing smoke | Control API smoke serves health/OpenAPI without a database connection; OpenAPI generation constructs the app | Keep contract generation and liveness verification independent of live dependencies and production secrets |
 
-Relevant source entry points: [Control API composition](https://github.com/RostrumAI/rostrum/blob/main/apps/control-api/src/app.ts), [configuration](https://github.com/RostrumAI/rostrum/blob/main/apps/control-api/src/env.ts), [database factory](https://github.com/RostrumAI/rostrum/blob/main/packages/database/src/client.ts), and [disposable Postgres helper](https://github.com/RostrumAI/rostrum/blob/main/packages/database/src/testing/postgres.ts). These links describe the pre-move tree; update durable references during implementation.
+Relevant source entry points: [Control API composition](https://github.com/RostrumAI/rostrum/blob/main/apis/control-api/src/app.ts), [configuration](https://github.com/RostrumAI/rostrum/blob/main/apis/control-api/src/env.ts), [database factory](https://github.com/RostrumAI/rostrum/blob/main/packages/database/src/client.ts), and [disposable Postgres helper](https://github.com/RostrumAI/rostrum/blob/main/packages/database/src/testing/postgres.ts). These links were updated when checkpoint 1 moved the backend service under `apis/`.
 
 ## Scope
 
@@ -72,12 +72,31 @@ Every agent-driven review uses a newly spawned subagent with no implementation-s
 - [x] Research Bun transport APIs and exercise TLS verification and graceful HTTP draining on Bun 1.4.0.
 - [x] Write this proposed plan; no runtime implementation or Epic acceptance is claimed.
 - [ ] Review the remaining readiness, reload, and shutdown mechanics against the owner's transport and token decisions.
-- [ ] Complete checkpoint 1: runnable backend directory cutover.
+- [x] Complete checkpoint 1: runnable backend directory cutover (commit `ce935de`).
 - [ ] Complete checkpoint 2: independently runnable secure daemon and database boundary.
 - [ ] Complete checkpoint 3: Control API integration and bounded lifecycle.
 - [ ] Complete checkpoint 4: focused acceptance evidence and operator handoff.
 
 Record implementation pull requests and checkpoint evidence here as work proceeds.
+
+### Checkpoint 1 evidence (2026-09-11)
+
+Branch `feat/m2-epic-1-backend-cutover`, commit `ce935de` against `main`: 40 files — 33 renames, 6 modified, 1 added, no deletions.
+
+- `bun install` then `bun install --frozen-lockfile`: both exit 0, and `git status` shows no lockfile rewrite, so the committed lockfile is consistent.
+- `bun run --filter @rostrum/control-api typecheck`: exit 0.
+- `bun test`: 375 pass, 0 fail across 29 files. The pre-move baseline on `main` was also 375 pass, 0 fail, so no assertion, fixture, or expectation changed.
+- `bun run --filter @rostrum/control-api smoke`: exit 0; the served document equals the checked-in contract.
+- `bun run check`: `@rostrum/workflow`, `@rostrum/database`, and `@rostrum/control-api` all exit 0. `bun run lint`: 204 files clean.
+- Moved-tree integrity: all 33 tracked files preserved. Only `src/scripts/generate-openapi.ts` (doc comment) and `src/scripts/smoke.ts` (drift message) differ from `main`, each by an equal-length `apps/control-api` → `apis/control-api` substitution, so behavior inside the moved tree is unchanged. `apis/control-api/openapi.json` is byte-identical (SHA-256 `55f38c11…`).
+- Live executable: `bun run apis/control-api/src/index.ts` served `GET /api/system/health` as `200 {"status":"ok"}` on an ephemeral port, served an OpenAPI document identical to the checked-in copy, answered 404 and 405 through the unchanged error envelope, logged `shutdown started` on SIGTERM, and exited 0.
+- Workspace linkage survives the move: `apis/control-api/node_modules/@rostrum/{database,workflow}` still resolve to `packages/`, because both locations sit two levels below the root.
+
+Remaining `apps/control-api` strings are deliberate non-changes: historical PR-comment citations in `.github/skills/code-review/rules/repository-conventions.md`, the historical finding example in `.github/skills/code-review/reviewer-contract.md`, and review-pipeline test fixtures in `scripts/review/*.test.ts`, which this checkpoint prohibits altering. One live reference did move alongside its `biome.json` duplicate: the generated-artifact skip list in `.github/skills/code-review/lenses/04-typescript-style.md`.
+
+Two pre-existing conditions surfaced, neither caused by this cutover and neither in checkpoint 1 scope: the committed `bun.lock` omitted the `trustedDependencies` block that root `package.json` declares, which the sanctioned `bun install` then syncs; and root `README.md` documents a `shutdown complete` line the process never logs. Checkpoint 4 owns the shutdown documentation, and checkpoint 3 owns lifecycle behavior.
+
+Independent review: a freshly spawned repository/tooling reviewer with no implementation-session context (`CutoverReviewer`) re-ran every acceptance command itself, byte-compared the moved tree against `main`, and confirmed the package name, route contract, and contract artifact are unchanged. It also verified that no re-export, symlink, or compatibility workspace remains under `apps/`, and that the CI command set is green. Verdict: approve, confidence 0.95, no findings. It additionally flagged scope prose in `.github/skills/code-review/rules/repository-conventions.md` that still described `apis/**` as a planned home; that prose is corrected in `ff67803`, leaving the reviewed cutover commit `ce935de` unmodified.
 
 ## Checkpoints
 
@@ -318,7 +337,8 @@ For focused non-loopback evidence, run the same executables on two provisioned p
 ## Discoveries
 
 - **2026-09-11 — Bun runtime evidence.** A disposable Bun 1.4.0 process served TLS using a generated certificate. Fetch with the trusted certificate and matching hostname returned 200. An untrusted certificate failed with `DEPTH_ZERO_SELF_SIGNED_CERT`; the trusted certificate at a mismatched hostname failed with `ERR_TLS_CERT_ALTNAME_INVALID`. A separate held HTTP request completed after `stop(false)` was requested, and the stop promise resolved only after release. The probe exited 0. This tests runtime primitives, not Rostrum's unimplemented boundary.
-- **Shutdown documentation must follow behavior.** Existing `stop(true)` is forced closure; it is not a graceful drain. Bun's idle timeout is also not an overall request or shutdown deadline.
+- **Shutdown documentation must follow behavior.** Existing `stop(true)` is forced closure; it is not a graceful drain. Bun's idle timeout is also not an overall request or shutdown deadline. Observed during checkpoint 1: the entry point logs `shutdown started` on SIGTERM and exits 0, but never logs the `shutdown complete` line the root README documents.
+- **2026-09-11 — Committed lockfile was already out of sync.** Root `package.json` declares a `trustedDependencies` list that the committed `bun.lock` omitted. The first sanctioned `bun install` during checkpoint 1 rewrote the lockfile to include it alongside the required workspace-path change. This is pre-existing drift, not a consequence of the directory move.
 - **2026-09-11 — Drain escalation evidence.** A second Bun 1.4.0 probe used a one-second idle timeout and a held request. `server.timeout(request, 0)` kept it open beyond that timeout during `stop(false)`; a subsequent `stop(true)` terminated the client connection. Both stop promises settled after the held handler was released, and the probe exited 0. This supports request-specific idle suppression and connection escalation, not an assumption that forced closure settles arbitrary handler code.
 - **Configuration errors can currently disappear.** Unknown YAML keys are omitted before schema checking, and an explicitly selected nonexistent config file is treated as optional. Security configuration must not preserve these behaviors.
 - **Offline schema construction is coupled to runtime composition.** Existing OpenAPI generation builds the app and its lazy database service. Requiring runtime credentials without separating composition would break tooling unnecessarily.
