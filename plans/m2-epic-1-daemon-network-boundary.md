@@ -71,11 +71,11 @@ Every agent-driven review uses a newly spawned subagent with no implementation-s
 - [x] Read governing documents and map the existing service, database, workspace, and test seams.
 - [x] Research Bun transport APIs and exercise TLS verification and graceful HTTP draining on Bun 1.4.0.
 - [x] Write this proposed plan; no runtime implementation or Epic acceptance is claimed.
-- [ ] Review the remaining readiness, reload, and shutdown mechanics against the owner's transport and token decisions.
+- [x] Review the remaining readiness, reload, and shutdown mechanics against the owner's transport and token decisions.
 - [x] Complete checkpoint 1: runnable backend directory cutover (commit `ce935de`).
 - [x] Complete checkpoint 2: independently runnable secure daemon and database boundary (PR #46; recorded below).
-- [x] Complete checkpoint 3: Control API integration and bounded lifecycle (PR #46; evidence recorded below, regression tests still outstanding).
-- [ ] Complete checkpoint 4: focused acceptance evidence and operator handoff.
+- [x] Complete checkpoint 3: Control API integration and bounded lifecycle (PR #47; evidence recorded below).
+- [x] Complete checkpoint 4: focused acceptance evidence and operator handoff (PR #48; recorded below).
 
 Record implementation pull requests and checkpoint evidence here as work proceeds.
 
@@ -151,6 +151,36 @@ One residual was noted and left as-is: the Control API drops the lifecycle's per
 - The database probe's aborted-flight regression has no permanent test; it was verified with a throwaway reproduction because the window is a single event-loop turn and the shared disposable-database fixture made a deterministic test risky to add late.
 - Raw driver exceptions in the error logs, and the dropped per-request abort signal, are recorded above rather than fixed.
 
+### Checkpoint split and review sweep (2026-09-12)
+
+The combined branch was split into three stacked pull requests so each checkpoint is reviewed against its own scope:
+
+| Checkpoint | Pull request | Base | Content |
+| --- | --- | --- | --- |
+| 2 | #46 `feat/m2-daemon-boundary` | `main` | `packages/server`, `apis/daemon`, the database handle and boolean TLS setting, and the review-tooling fixes |
+| 3 | #47 `feat/m2-epic-1-checkpoint-3` | #46 | Control API daemon client, readiness route, explicit request dependencies, and the shared lifecycle |
+| 4 | #48 `feat/m2-epic-1-checkpoint-4` | #47 | Operator documentation |
+
+The combined head that the first three reviews examined is preserved at `safety/m2-full-boundary` (`68aae91`).
+
+Response to review:
+
+- Request dependencies now resolve from the Hono request binding. The request-scoped async storage and the "snapshot"/"borrowing" vocabulary are gone, a request cannot execute without its services, and `RunServiceOptions` no longer declares a readiness hook that the runtime never called.
+- `WorkflowService` again exposes its database boundary and a single `close()`; the service's dependency object delegates to it, so exactly one owner closes the pool.
+- `DATABASE_TLS_MODE` (`verify-full`/`disable`) became `DATABASE_TLS` (`true`/`false`) in the service contract, the migration command, the disposable-database helper, CI, and the documentation.
+- The daemon client strips IPv6 brackets before handing the host to `node:http`/`node:https`, so a literal IPv6 daemon origin connects; the bracketed form was reproduced as `ENOTFOUND` and the fix is covered by a test.
+- Every file this change touches carries file-level documentation, and the exported declarations the review named — the daemon configuration and services modules, the daemon feature slices, the database handle types, and `DaemonApp.openApi` — now carry TSDoc.
+- The mechanical new-source-file coverage check exempts executable scripts, test fixtures, and test helpers, and accepts a service-wide `boundary.test.ts` suite as coverage for the modules it exercises. The two `REPO-TEST-03` observations the reviewer withdrew on `scripts/process.ts` and `scripts/smoke.ts`, and the one it stood behind on `scripts/generate-openapi.ts`, were all this false positive.
+- The standalone Control API smoke script became an integration test, and the shared logger tests moved to `packages/server`. The daemon smoke check now runs in CI alongside the Control API one.
+
+Evidence per checkpoint:
+
+- Checkpoint 2 (`14d1059`): `bun run check`, `bun run lint`, `bun test` (409 pass, 0 fail), both service smokes, and `bun run review --since origin/main --dry-run-rules` with no findings.
+- Checkpoint 3 (`3bf3a6a`): the same gates with 418 tests passing, plus two real processes against one migrated disposable database — Control API readiness `200` with both checks `ok`, daemon readiness `200` authenticated and `401` unauthenticated, and with the daemon stopped a `503 daemon_unavailable` body while liveness stayed `200` and workflow authoring still returned `200`. Both processes exited `0` on SIGTERM.
+- Checkpoint 4 (`29ceb22`): documentation only. Every claim was re-read against the implementation, including the feature-slice contract, the logging records, the readiness codes, and the contract-parity checks.
+
+Gaps that remain after the sweep, unchanged from the list above: no non-loopback evidence, no permanent regression test for the database probe's aborted flight, raw driver exceptions still logged verbatim, and the Control API still ignores the lifecycle's per-request abort signal.
+
 ## Checkpoints
 
 ### Checkpoint 1: Backend workspaces run from apis
@@ -224,7 +254,7 @@ Keep environment-over-YAML-over-default precedence and camelCase YAML keys, with
 | `NODE_ENV` / `nodeEnv` | Both and migration CLI | Retain development/test/production values and current development default; the CLI reads `NODE_ENV` |
 | `LOG_LEVEL` / `logLevel` | Both | Retain LogTape levels and environment-dependent default |
 | `DATABASE_URL` / `databaseUrl` | Both | Required in executable service configuration; same database target, potentially different credentials |
-| `DATABASE_TLS_MODE` / `databaseTlsMode` | Both and migration CLI | `verify-full` by default; `disable` allowed only with the local exception and a literal loopback target |
+| `DATABASE_TLS` / `databaseTls` | Both and migration CLI | `true` by default; `false` allowed only with the local exception and a literal loopback target |
 | `TLS_CERT_FILE` / `tlsCertFile` | Daemon | PEM server certificate chain, paired with key for direct TLS; not loaded/served in proxy mode |
 | `TLS_KEY_FILE` / `tlsKeyFile` | Daemon | Matching private key; validate before opening service resources |
 | `BEHIND_REVERSE_PROXY` / `behindReverseProxy` | Daemon | Default false; true selects an HTTP loopback listener behind a same-host HTTPS proxy instead of daemon-hosted TLS |
