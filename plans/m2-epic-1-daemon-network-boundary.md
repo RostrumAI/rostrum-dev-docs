@@ -127,6 +127,30 @@ Outstanding at this commit, stated so reviews are not misled:
 
 Pre-existing, unrelated: the local Postgres volume reports `corrupted migrations: previously executed migration 001_drafts is missing`, because that migration was renamed to `001_workflows.ts`. Acceptance used a disposable database. Separately, the local OrbStack runtime was not running and had to be started before container work could proceed.
 
+### Independent reviews of checkpoints 2–3 (2026-09-12)
+
+Supersedes the outstanding list above, which describes commit `f850229`. Three freshly spawned reviewers with no implementation-session context ran against `5f18497`, each told to falsify rather than restate. Commits `0ab463d` and `3135dd6` address what they found.
+
+**Security** — authentication, the local plaintext exception, token parsing/rotation, database transport, and leakage all held under executed adversarial matrices (20 credential cases, 26 URL forms, 23 token cases, 33 database-option cases). Two findings:
+
+1. `apis/control-api/src/daemon/client.ts` passed `proxy: undefined` with a comment claiming it disabled ambient proxy routing. `undefined` is indistinguishable from omitting the option, and Bun's `fetch` offers no opt-out. Direct measurement confirmed the worst case: with `HTTP_PROXY` set, the probe — including its `Authorization: Bearer` header — reached the proxy for the omitted, `undefined`, **and** `""` forms, and the reviewer's suggested `""` remediation did not work either. The client now uses `node:http`/`node:https`, which never consult those variables, with default trust (including `NODE_EXTRA_CA_CERTS`) and verification intact. This was a live credential-exposure path, not hygiene.
+2. Raw driver exceptions are logged verbatim by both services' error handlers. Pre-existing behaviour carried into the shared lifecycle; no credential, token, or full URL is exposed and responses stay sanitized. Not fixed here.
+
+**Database** — schema readiness, probe cancellation, pool ownership, caller migration, and test quality all held, several under executed counter-examples (a bare TCP listener, an adversarial server that completes the SSLRequest then resets, a lock-blocked probe, and a stuck-pool close). One finding: a `probe()` caller arriving while an aborted flight was still settling joined that dead flight and was handed a fabricated `database_timeout` instead of using its own deadline. Fixed by treating an aborted controller as no live flight; re-verified against a live database, where the late probe now returns the true result.
+
+**Backend/concurrency** — shutdown and readiness were sound, including entering drain exactly once, the idle-timeout suppression, held requests surviving past Bun's idle cut, and readiness cancelling unfinished siblings. Two reproduced reload defects, both fixed:
+
+1. A different-address reload whose candidate could not bind attempted restoration by rebinding the address still held by the live listener, so a rejected reload exited 1 and killed a healthy process. Restoration now applies only when the previous listener was actually released; a regression test binds an occupied port and asserts the original listener still serves.
+2. A SIGTERM delivered while a same-address reload was draining did not stop the reload reopening a listener and swapping the live snapshot after drain began — observed as `reload applied listener=true` 2.7 s after `shutdown started`. Draining is now re-checked before rebinding.
+
+One residual was noted and left as-is: the Control API drops the lifecycle's per-request abort signal, so its probes rely on `dependencyTimeoutMs` alone. They remain bounded.
+
+### Checkpoints 2–3 remaining gaps (2026-09-12)
+
+- No non-loopback evidence. Every observation above is loopback on one host and must not be presented as separate-host proof. The container runtime that would provide isolated networks was not running; Epic 6 owns the reusable environment.
+- The database probe's aborted-flight regression has no permanent test; it was verified with a throwaway reproduction because the window is a single event-loop turn and the shared disposable-database fixture made a deterministic test risky to add late.
+- Raw driver exceptions in the error logs, and the dropped per-request abort signal, are recorded above rather than fixed.
+
 ## Checkpoints
 
 ### Checkpoint 1: Backend workspaces run from apis
