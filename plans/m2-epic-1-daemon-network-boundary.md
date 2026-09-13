@@ -183,6 +183,24 @@ Verification uses a clean `bun install --frozen-lockfile` per branch with `node_
 
 Gaps that remain after the sweep, unchanged from the list above: no non-loopback evidence, no permanent regression test for the database probe's aborted flight, raw driver exceptions still logged verbatim, and the Control API still ignores the lifecycle's per-request abort signal.
 
+### Checkpoint 2 comment sweep (2026-09-13)
+
+The open review threads on #46 were verified against the pull request head rather than against the line each was anchored to, and the resolutions were grouped into five stacked pull requests, each branched on its predecessor and each targeting `feat/m2-daemon-boundary`:
+
+| Pull request | Theme | Contents |
+| --- | --- | --- |
+| #52 | Single-line control flow | Braces on every remaining `REPO-TS-02` / `GTS-CONTROL-01` shorthand in the files the review flagged, and its siblings in those files |
+| #53 | Comment style and TSDoc | Group by idea in the shared modules the review named, TSDoc on the declarations it named, `@fileoverview` on every Control API feature slice |
+| #54 | Daemon application | `describeFeature` documentation and grouping, the proposed `fetch` TSDoc, the OpenAPI document generated once, the constant-time comparison rationale |
+| #55 | Control API boundary | Declared header parameters enforced, boundary-neutral guard error code, `loadConfig` returning and validating the database policy |
+| #56 | Verification | The Control API boot check as a test, and coverage of the reload's dependency rebuild and retirement |
+
+Findings already corrected by commits in the pull request, and findings whose files moved to checkpoint 3, were closed with that evidence rather than re-implemented. All 124 threads are resolved; 11 were resolved before the sweep.
+
+Three changes alter behaviour: the OpenAPI document is generated once per process, a declared header parameter is now enforced rather than documented only, and the parameter guard answers `invalid_parameter` where it previously borrowed the workflow area's code. The Control API contract artifact is unchanged. Verified on the stack tip: `bun run check`, `bun run lint`, `bun test` (429 pass, 0 fail), and the daemon smoke.
+
+Two overlaps belong to the rebase: #47 replaces `apis/control-api/src/scripts/smoke.ts` and adds its own `apis/control-api/src/app.test.ts`, whose version supersedes #56's for that file, and #47's `services.ts` replaces the `loadConfig` surface #55 folds.
+
 ## Checkpoints
 
 ### Checkpoint 1: Backend workspaces run from apis
