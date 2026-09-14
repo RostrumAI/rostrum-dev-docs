@@ -59,6 +59,8 @@ M2 is the active roadmap milestone. M3 is scoped and ready for implementation pl
 
 Durable decisions are under `decisions/`. Research remains under `research/` only when it is useful beyond one Epic.
 
+- [Server bootstrap API alternatives](research/server-bootstrap-api-alternatives.md)
+
 ## Plans
 
 A plan covers one scoped workstream within one technical Epic. Delete it after completion once durable information has moved into code, an Epic, a specification, or a decision record. Git history retains the completed plan.
