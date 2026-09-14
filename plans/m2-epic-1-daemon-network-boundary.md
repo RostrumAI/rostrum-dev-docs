@@ -71,11 +71,11 @@ Every agent-driven review uses a newly spawned subagent with no implementation-s
 - [x] Read governing documents and map the existing service, database, workspace, and test seams.
 - [x] Research Bun transport APIs and exercise TLS verification and graceful HTTP draining on Bun 1.4.0.
 - [x] Write this proposed plan; no runtime implementation or Epic acceptance is claimed.
-- [ ] Review the remaining readiness, reload, and shutdown mechanics against the owner's transport and token decisions.
+- [x] Review the remaining readiness, reload, and shutdown mechanics against the owner's transport and token decisions.
 - [x] Complete checkpoint 1: runnable backend directory cutover (commit `ce935de`).
-- [ ] Complete checkpoint 2: independently runnable secure daemon and database boundary.
-- [ ] Complete checkpoint 3: Control API integration and bounded lifecycle.
-- [ ] Complete checkpoint 4: focused acceptance evidence and operator handoff.
+- [x] Complete checkpoint 2: independently runnable secure daemon and database boundary (PR #46; recorded below).
+- [x] Complete checkpoint 3: Control API integration and bounded lifecycle (PR #47; evidence recorded below).
+- [x] Complete checkpoint 4: focused acceptance evidence and operator handoff (PR #48; recorded below).
 
 Record implementation pull requests and checkpoint evidence here as work proceeds.
 
@@ -97,6 +97,113 @@ Remaining `apps/control-api` strings are deliberate non-changes: historical PR-c
 Two pre-existing conditions surfaced, neither caused by this cutover and neither in checkpoint 1 scope: the committed `bun.lock` omitted the `trustedDependencies` block that root `package.json` declares, which the sanctioned `bun install` then syncs; and root `README.md` documents a `shutdown complete` line the process never logs. Checkpoint 4 owns the shutdown documentation, and checkpoint 3 owns lifecycle behavior.
 
 Independent review: a freshly spawned repository/tooling reviewer with no implementation-session context (`CutoverReviewer`) re-ran every acceptance command itself, byte-compared the moved tree against `main`, and confirmed the package name, route contract, and contract artifact are unchanged. It also verified that no re-export, symlink, or compatibility workspace remains under `apps/`, and that the CI command set is green. Verdict: approve, confidence 0.95, no findings. It additionally flagged scope prose in `.github/skills/code-review/rules/repository-conventions.md` that still described `apis/**` as a planned home; that prose is corrected in `ff67803`, leaving the reviewed cutover commit `ce935de` unmodified.
+
+### Checkpoints 2–3 evidence (2026-09-12)
+
+Branch `feat/m2-daemon-boundary`, commit `f850229`, PR #46. 60 files, +3929/−433. Adds `packages/server` (`@rostrum/server`), `apis/daemon`, the database handle contract, and the Control API integration.
+
+Integrated checks: `bun run check` (all five workspaces), `bun run lint` (231 files), `bun test` (**395 pass, 0 fail**), and both service smokes. The daemon smoke spawns the real `src/index.ts`, authenticates, verifies three-way OpenAPI parity, and confirms a bounded SIGTERM exit.
+
+Two real processes against one migrated disposable database:
+
+- Control API readiness returned `200 {"status":"ready","checks":{"database":{"status":"ok"},"daemon":{"status":"ok"}}}`: the daemon was reached over HTTP with its bearer token, each service probing the same database through its own pool.
+- Daemon readiness returned 200 when authenticated; missing or wrong credentials returned **401** with `WWW-Authenticate: Bearer` and `Cache-Control: no-store`.
+- With the daemon stopped, readiness returned `503` with `daemon_unavailable` in **0.9 ms** while liveness stayed 200 and `POST /api/workflows` still returned **201**, confirming both the first-known-failure rule and authoring isolation.
+- Token rotation by SIGHUP without restarting either process: the overlap set accepted both tokens; after retirement the old token returned **401** and the adopted token returned 200 with Control API readiness at 200.
+
+Three defects were found and fixed during integration, one of them material to a stated criterion:
+
+1. The Control API kept sending the **retired** token after a token-only reload, because readiness captured `config` when dependencies were built and token changes deliberately do not rebuild dependencies. Readiness now resolves from the request's configuration snapshot. This is exactly the criterion "subsequent requests, including keep-alive requests, use the new set".
+2. The database probe reported a connection failure as `database_timeout`: a supplied socket's connect-level failure never reaches postgres.js's error path. The probe now settles on the transport failure itself.
+3. `packages/database/src/client.test.ts` asserted that a connection to `127.0.0.2` is refused, which holds on Linux but not on macOS, where that address does not answer. The assertion therefore never demonstrated IP-SAN verification. The test now omits the IP SAN and proves rejection of an IP-literal connection to the same trusted server, which is deterministic on both platforms and tests the intended property.
+
+Outstanding at this commit, stated so reviews are not misled:
+
+- `packages/server/src/lifecycle.test.ts` and `reload.test.ts` are **not written**; lifecycle and reload behaviour was verified against real processes rather than by permanent regression tests.
+- Forced shutdown (bounded nonzero exit) and same-address listener replacement are implemented but unexercised.
+- No non-loopback evidence exists yet. All observation above is loopback on one host and must not be presented as separate-host proof; Epic 6 owns the reusable environment.
+- Fresh-subagent security, database, and concurrency reviews of checkpoints 2–3 have not run.
+- Operator documentation remains to be updated, including the root `README.md`, which still describes the pre-daemon configuration.
+
+Pre-existing, unrelated: the local Postgres volume reports `corrupted migrations: previously executed migration 001_drafts is missing`, because that migration was renamed to `001_workflows.ts`. Acceptance used a disposable database. Separately, the local OrbStack runtime was not running and had to be started before container work could proceed.
+
+### Independent reviews of checkpoints 2–3 (2026-09-12)
+
+Supersedes the outstanding list above, which describes commit `f850229`. Three freshly spawned reviewers with no implementation-session context ran against `5f18497`, each told to falsify rather than restate. Commits `0ab463d` and `3135dd6` address what they found.
+
+**Security** — authentication, the local plaintext exception, token parsing/rotation, database transport, and leakage all held under executed adversarial matrices (20 credential cases, 26 URL forms, 23 token cases, 33 database-option cases). Two findings:
+
+1. `apis/control-api/src/daemon/client.ts` passed `proxy: undefined` with a comment claiming it disabled ambient proxy routing. `undefined` is indistinguishable from omitting the option, and Bun's `fetch` offers no opt-out. Direct measurement confirmed the worst case: with `HTTP_PROXY` set, the probe — including its `Authorization: Bearer` header — reached the proxy for the omitted, `undefined`, **and** `""` forms, and the reviewer's suggested `""` remediation did not work either. The client now uses `node:http`/`node:https`, which never consult those variables, with default trust (including `NODE_EXTRA_CA_CERTS`) and verification intact. This was a live credential-exposure path, not hygiene.
+2. Raw driver exceptions are logged verbatim by both services' error handlers. Pre-existing behaviour carried into the shared lifecycle; no credential, token, or full URL is exposed and responses stay sanitized. Not fixed here.
+
+**Database** — schema readiness, probe cancellation, pool ownership, caller migration, and test quality all held, several under executed counter-examples (a bare TCP listener, an adversarial server that completes the SSLRequest then resets, a lock-blocked probe, and a stuck-pool close). One finding: a `probe()` caller arriving while an aborted flight was still settling joined that dead flight and was handed a fabricated `database_timeout` instead of using its own deadline. Fixed by treating an aborted controller as no live flight; re-verified against a live database, where the late probe now returns the true result.
+
+**Backend/concurrency** — shutdown and readiness were sound, including entering drain exactly once, the idle-timeout suppression, held requests surviving past Bun's idle cut, and readiness cancelling unfinished siblings. Two reproduced reload defects, both fixed:
+
+1. A different-address reload whose candidate could not bind attempted restoration by rebinding the address still held by the live listener, so a rejected reload exited 1 and killed a healthy process. Restoration now applies only when the previous listener was actually released; a regression test binds an occupied port and asserts the original listener still serves.
+2. A SIGTERM delivered while a same-address reload was draining did not stop the reload reopening a listener and swapping the live snapshot after drain began — observed as `reload applied listener=true` 2.7 s after `shutdown started`. Draining is now re-checked before rebinding.
+
+One residual was noted and left as-is: the Control API drops the lifecycle's per-request abort signal, so its probes rely on `dependencyTimeoutMs` alone. They remain bounded.
+
+### Checkpoints 2–3 remaining gaps (2026-09-12)
+
+- No non-loopback evidence. Every observation above is loopback on one host and must not be presented as separate-host proof. The container runtime that would provide isolated networks was not running; Epic 6 owns the reusable environment.
+- The database probe's aborted-flight regression has no permanent test; it was verified with a throwaway reproduction because the window is a single event-loop turn and the shared disposable-database fixture made a deterministic test risky to add late.
+- Raw driver exceptions in the error logs, and the dropped per-request abort signal, are recorded above rather than fixed.
+
+### Checkpoint split and review sweep (2026-09-12)
+
+The combined branch was split into three stacked pull requests so each checkpoint is reviewed against its own scope:
+
+| Checkpoint | Pull request | Base | Content |
+| --- | --- | --- | --- |
+| 2 | #46 `feat/m2-daemon-boundary` | `main` | `packages/server`, `apis/daemon`, the database handle and boolean TLS setting, and the review-tooling fixes |
+| 3 | #47 `feat/m2-epic-1-checkpoint-3` | #46 | Control API daemon client, readiness route, explicit request dependencies, and the shared lifecycle |
+| 4 | #48 `feat/m2-epic-1-checkpoint-4` | #47 | Operator documentation |
+
+The combined head that the first three reviews examined is preserved at `safety/m2-full-boundary` (`68aae91`).
+
+Response to review:
+
+- Request dependencies now resolve from the Hono request binding. The request-scoped async storage and the "snapshot"/"borrowing" vocabulary are gone, a request cannot execute without its services, and `RunServiceOptions` no longer declares a readiness hook that the runtime never called.
+- `WorkflowService` again exposes its database boundary and a single `close()`; the service's dependency object delegates to it, so exactly one owner closes the pool.
+- `DATABASE_TLS_MODE` (`verify-full`/`disable`) became `DATABASE_TLS` (`true`/`false`) in the service contract, the migration command, the disposable-database helper, CI, and the documentation.
+- The daemon client strips IPv6 brackets before handing the host to `node:http`/`node:https`, so a literal IPv6 daemon origin connects; the bracketed form was reproduced as `ENOTFOUND` and the fix is covered by a test.
+- Every file this change touches carries file-level documentation, and the exported declarations the review named — the daemon configuration and services modules, the daemon feature slices, the database handle types, and `DaemonApp.generateOpenApiDocument` — now carry TSDoc.
+- The mechanical new-source-file coverage check exempts executable scripts and files that export nothing, and now also exempts test fixtures and harnesses and accepts a service-wide `boundary.test.ts` suite as coverage. The two `REPO-TEST-03` observations the reviewer withdrew on `scripts/process.ts` and `scripts/smoke.ts`, and the one it stood behind on `scripts/generate-openapi.ts`, were all this false positive. The exemption is layered on top of the rule rework in #49, which already reached the script and export-less cases, so only the fixture, harness, and boundary-suite cases are new here.
+- The standalone Control API smoke script became an integration test, and the shared logger tests moved to `packages/server`. The daemon smoke check now runs in CI alongside the Control API one.
+
+Evidence per checkpoint (branch tips after merging `main`):
+
+- Checkpoint 2 (`feat/m2-daemon-boundary`, `96541f38`): `bun install --frozen-lockfile`, `bun run check`, `bun run lint`, `bun test` (419 pass, 0 fail), both service smokes, and `bun run review --since origin/main --dry-run-rules` with no findings.
+- Checkpoint 3 (`feat/m2-epic-1-checkpoint-3`, `7356a2cb`): the same gates with 428 tests passing, plus two real processes against one migrated disposable database — Control API readiness `200` with both checks `ok`, daemon readiness `200` authenticated and `401` unauthenticated, and with the daemon stopped a `503 daemon_unavailable` body while liveness stayed `200` and workflow authoring still returned `200`. Both processes exited `0` on SIGTERM.
+- Checkpoint 4 (`feat/m2-epic-1-checkpoint-4`, `2f48a997`): documentation only. Every claim was re-read against the implementation, including the feature-slice contract, the logging records, the readiness codes, and the contract-parity checks.
+
+Verification uses a clean `bun install --frozen-lockfile` per branch with `node_modules` removed first. That step matters: CI caught that the Control API manifest did not declare `@rostrum/server` even though it imports it, because the developer checkout already had the workspace symlink. The manifest now declares the dependency, and the committed lockfile was already correct, so a frozen install reproduces CI exactly.
+
+Gaps that remain after the sweep, unchanged from the list above: no non-loopback evidence, no permanent regression test for the database probe's aborted flight, raw driver exceptions still logged verbatim, and the Control API still ignores the lifecycle's per-request abort signal.
+
+### Checkpoint 2 comment sweep (2026-09-13)
+
+The open review threads on #46 were verified against the pull request head rather than against the line each was anchored to, and the resolutions were grouped into five stacked pull requests, each branched on its predecessor and each targeting `feat/m2-daemon-boundary`:
+
+| Pull request | Theme | Contents |
+| --- | --- | --- |
+| #52 | Single-line control flow | Braces on every remaining `REPO-TS-02` / `GTS-CONTROL-01` shorthand in the files the review flagged, and its siblings in those files |
+| #53 | Comment style and TSDoc | Group by idea in the shared modules the review named, TSDoc on the declarations it named, `@fileoverview` on every Control API feature slice |
+| #54 | Daemon application | `describeFeature` documentation and grouping, the proposed `fetch` TSDoc, the OpenAPI document generated once, the constant-time comparison rationale |
+| #55 | Control API boundary | Declared header parameters enforced, boundary-neutral guard error code, `loadConfig` returning and validating the database policy |
+| #56 | Verification | The Control API boot check as a test, and coverage of the reload's dependency rebuild and retirement |
+
+Findings already corrected by commits in the pull request, and findings whose files moved to checkpoint 3, were closed with that evidence rather than re-implemented. All 124 threads are resolved; 11 were resolved before the sweep.
+
+Three changes alter behaviour: the OpenAPI document is generated once per process, a declared header parameter is now enforced rather than documented only, and the parameter guard answers `invalid_parameter` where it previously borrowed the workflow area's code. The Control API contract artifact is unchanged. Verified on the stack tip: `bun run check`, `bun run lint`, `bun test` (429 pass, 0 fail), and the daemon smoke.
+
+Two overlaps belong to the rebase: #47 replaces `apis/control-api/src/scripts/smoke.ts` and adds its own `apis/control-api/src/app.test.ts`, whose version supersedes #56's for that file, and #47's `services.ts` replaces the `loadConfig` surface #55 folds.
+
+Review of the stack added three corrections. `validateDaemonUrl`'s host-extraction comment no longer claims the daemon host must be an IP literal, which the function only requires inside the local exception. `protocol.ts` no longer carries a step comment beside the TSDoc that says the same thing. The daemon's OpenAPI methods are named for what they do: `generateOpenApiDocument()` generates, and `getOpenApiDocument()` returns the copy the route serves.
+
+Review of #55 added three more. `parameterGuard` and its test moved into `packages/server` as `@rostrum/server/parameter-guard`, reversing the decision recorded under "Files and dependency direction". `LoadedControlApiConfig` documents each member. And an absent required parameter is answered with `the <location> parameter <name> is required` instead of quoting a value the caller never sent.
 
 ## Checkpoints
 
@@ -154,7 +261,7 @@ Escalate any unproved acceptance criterion rather than marking the Epic complete
 
 - `apis/control-api`: retain workflow feature modules and their public schemas. Change `env.ts`, `index.ts`, `app.ts`, `services.ts`, `workflows/service.ts`, and `workflows/database.ts` for resolved configuration, reload, and borrowed database ownership. Add `src/daemon/client.ts` and `src/features/system/readiness.ts`. It is a TLS client on the daemon link, not a certificate-presenting peer.
 - `apis/daemon`: add its own `env.ts`, `index.ts`, `app.ts`, dependency container, token authentication, direct/proxy listener configuration, and `src/features/system/{health,readiness}.ts`. It owns no workflow executor or run map in this Epic.
-- `packages/server` (`@rostrum/server`): move/generalize the existing feature loader's service type, configuration reader, JSON logger, and common HTTP mechanics only as needed by the two consumers; add the shared token-source parser and SIGHUP lifecycle. Leave workflow-specific `parameterGuard` and its `invalid_workflow_input` response with the Control API. Export TypeBox daemon health/readiness/error schemas and inferred types. Do not import either service or acquire resources at module load. Keep publication findings/schema ownership unchanged; boundary errors have an empty `findings` array compatible with the public envelope.
+- `packages/server` (`@rostrum/server`): move/generalize the existing feature loader's service type, configuration reader, JSON logger, and common HTTP mechanics only as needed by the two consumers; add the shared token-source parser and SIGHUP lifecycle. The parameter guard lives here too, beside the loader whose `ParameterDefinition` it consumes, and answers the boundary-neutral `invalid_parameter`; review of the checkpoint 2 stack overruled the earlier decision to leave it workflow-specific in the Control API. Export TypeBox daemon health/readiness/error schemas and inferred types. Do not import either service or acquire resources at module load. Keep publication findings/schema ownership unchanged; boundary errors have an empty `findings` array compatible with the public envelope.
 - `packages/database`: own connection options, driver handles, readiness queries, timeout/cancellation, and pool closure. Use runtime default CA trust rather than an application CA-file option. Update `src/client.ts`, exports, migration CLI, disposable-database helper, and current consumers together. Resolve exported-symbol references before changing signatures. Do not add migrations or run tables.
 - Root/workspace tooling: update workspace and generated-file paths; add the daemon to appropriate checks without broadening the Postgres-only development Compose file into the Epic 6 environment.
 
@@ -171,7 +278,7 @@ Keep environment-over-YAML-over-default precedence and camelCase YAML keys, with
 | `NODE_ENV` / `nodeEnv` | Both and migration CLI | Retain development/test/production values and current development default; the CLI reads `NODE_ENV` |
 | `LOG_LEVEL` / `logLevel` | Both | Retain LogTape levels and environment-dependent default |
 | `DATABASE_URL` / `databaseUrl` | Both | Required in executable service configuration; same database target, potentially different credentials |
-| `DATABASE_TLS_MODE` / `databaseTlsMode` | Both and migration CLI | `verify-full` by default; `disable` allowed only with the local exception and a literal loopback target |
+| `DATABASE_TLS` / `databaseTls` | Both and migration CLI | `true` by default; `false` allowed only with the local exception and a literal loopback target |
 | `TLS_CERT_FILE` / `tlsCertFile` | Daemon | PEM server certificate chain, paired with key for direct TLS; not loaded/served in proxy mode |
 | `TLS_KEY_FILE` / `tlsKeyFile` | Daemon | Matching private key; validate before opening service resources |
 | `BEHIND_REVERSE_PROXY` / `behindReverseProxy` | Daemon | Default false; true selects an HTTP loopback listener behind a same-host HTTPS proxy instead of daemon-hosted TLS |
