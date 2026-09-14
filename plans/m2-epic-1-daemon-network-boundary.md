@@ -169,7 +169,7 @@ Response to review:
 - `WorkflowService` again exposes its database boundary and a single `close()`; the service's dependency object delegates to it, so exactly one owner closes the pool.
 - `DATABASE_TLS_MODE` (`verify-full`/`disable`) became `DATABASE_TLS` (`true`/`false`) in the service contract, the migration command, the disposable-database helper, CI, and the documentation.
 - The daemon client strips IPv6 brackets before handing the host to `node:http`/`node:https`, so a literal IPv6 daemon origin connects; the bracketed form was reproduced as `ENOTFOUND` and the fix is covered by a test.
-- Every file this change touches carries file-level documentation, and the exported declarations the review named — the daemon configuration and services modules, the daemon feature slices, the database handle types, and `DaemonApp.openApi` — now carry TSDoc.
+- Every file this change touches carries file-level documentation, and the exported declarations the review named — the daemon configuration and services modules, the daemon feature slices, the database handle types, and `DaemonApp.generateOpenApiDocument` — now carry TSDoc.
 - The mechanical new-source-file coverage check exempts executable scripts and files that export nothing, and now also exempts test fixtures and harnesses and accepts a service-wide `boundary.test.ts` suite as coverage. The two `REPO-TEST-03` observations the reviewer withdrew on `scripts/process.ts` and `scripts/smoke.ts`, and the one it stood behind on `scripts/generate-openapi.ts`, were all this false positive. The exemption is layered on top of the rule rework in #49, which already reached the script and export-less cases, so only the fixture, harness, and boundary-suite cases are new here.
 - The standalone Control API smoke script became an integration test, and the shared logger tests moved to `packages/server`. The daemon smoke check now runs in CI alongside the Control API one.
 
@@ -200,6 +200,8 @@ Findings already corrected by commits in the pull request, and findings whose fi
 Three changes alter behaviour: the OpenAPI document is generated once per process, a declared header parameter is now enforced rather than documented only, and the parameter guard answers `invalid_parameter` where it previously borrowed the workflow area's code. The Control API contract artifact is unchanged. Verified on the stack tip: `bun run check`, `bun run lint`, `bun test` (429 pass, 0 fail), and the daemon smoke.
 
 Two overlaps belong to the rebase: #47 replaces `apis/control-api/src/scripts/smoke.ts` and adds its own `apis/control-api/src/app.test.ts`, whose version supersedes #56's for that file, and #47's `services.ts` replaces the `loadConfig` surface #55 folds.
+
+Review of the stack added three corrections. `validateDaemonUrl`'s host-extraction comment no longer claims the daemon host must be an IP literal, which the function only requires inside the local exception. `protocol.ts` no longer carries a step comment beside the TSDoc that says the same thing. The daemon's OpenAPI methods are named for what they do: `generateOpenApiDocument()` generates, and `getOpenApiDocument()` returns the copy the route serves.
 
 ## Checkpoints
 
