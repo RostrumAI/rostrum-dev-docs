@@ -1,11 +1,27 @@
-# Restart-only server framework proposal
+# Restart-only server framework
 
-Status: Proposed architecture and implementation direction
+Status: Delivered. The implementation lives in the rostrum repository; this document remains the design record for `@rostrum/server`.
 
 Applies to: `@rostrum/server`, `@rostrum/daemon`, and `@rostrum/control-api`
 
 Last researched: 2026-09-14
+Delivered: 2026-09-15
+
 Terminology: route modules are **services**, not feature slices. This is a naming and directory change only: `/features/workflows/create.ts` becomes `/services/workflows/create.ts`.
+
+## Delivered surface
+
+`@rostrum/server` now owns one implementation of each contract this document proposed, and both backend services are built on it:
+
+- `boot(root, definition, open)` loads and validates configuration once, initializes logging, asks the service to open its resources and application, binds Bun, and owns bounded shutdown. `ServiceRuntimeConfig`, `OpenedService`, and the exactly-once close live beside it.
+- `defineConfig` and `loadConfig` declare an application's settings, sources, and defaults, and return one frozen configuration.
+- `createServiceBuilder` declares a service as one value: binding, request schemas, OpenAPI metadata, documented responses, contributed components, and `handler(request, response, context)`.
+- `createServerApp` returns a branded application that installs the mandatory request-id and access-log middleware before any route, and `createServiceRegistrar` rejects conflicting declarations at startup.
+- `serveOpenApi` serves the contract translated from the same registered services.
+- Strict JSON body and path-parameter validation run before every handler, and the application owns the error envelope each failure answers with.
+- Both applications keep one static `routes.ts`, and the filesystem scan, dynamic import, service accessors, and loader are gone.
+
+Verified by the repository's own gates and by a real two-process run against a disposable database: daemon authentication and readiness, aggregated Control API readiness over HTTP, a full authoring round trip, the documented 400/404/405 shapes, and a bounded zero exit on SIGTERM.
 
 ## Decision
 
@@ -32,10 +48,13 @@ export interface ControlApiContext {
     readonly config: Readonly<ControlApiConfig>;
     readonly database: {
         readonly workflows: WorkflowOperations;
-        readonly readiness: (signal: AbortSignal) => Promise<Readiness>;
     };
+    readonly readiness: (signal: AbortSignal) => Promise<Readiness>;
     readonly abortSignal: AbortSignal;
 }
+```
+
+`readiness` stays outside `database` because it aggregates more than the database: the Control API's own connection and the daemon it calls.
 
 export const CONTROL_API_TAG = {
     SYSTEM: "system",
@@ -196,13 +215,15 @@ M2 still loses in-memory daemon runs on exit. Durable checkpoints, attempts, ide
 
 ## Implementation sequence
 
-1. Change the daemon decision and operator guide to startup-only configuration; remove reload and rotation claims.
-2. Make daemon and Control API configuration one-shot and service-owned while preserving precedence, validation, and secret-safe errors.
-3. Add the context-generic service builder, inferred request and response arguments, automatic strict JSON validation, reserved `context.raw`, tag constraint, OpenAPI translation, and registrar.
-4. Move route modules from `features` to `services`, add explicit `routes.ts` modules, and delete dynamic discovery, service accessors, and obsolete loader tests.
-5. Add the branded server-app constructor with mandatory middleware and application middleware extension, separate resource-free application construction from production service opening, then replace the lifecycle with `boot`.
+All five steps are delivered:
 
-Verification must compile positive and negative fixtures for all three handler arguments and the reserved `raw` field, prove mandatory and application middleware ordering, exercise valid and invalid JSON through `app.request`, compare generated OpenAPI, verify configuration failure before resource acquisition, and smoke-test both real executables through startup and bounded shutdown.
+1. The daemon decision and the operator guide describe startup-only configuration; the reload and rotation claims are gone.
+2. Daemon and Control API configuration is one-shot and service-owned, with the previous precedence, validation, and secret-safe errors preserved.
+3. The context-generic service builder, inferred handler arguments, automatic strict JSON validation, the reserved `context.raw`, the tag constraint, OpenAPI translation, and the registrar are in place.
+4. Route modules moved from `features` to `services`, each application has one static `routes.ts`, and dynamic discovery, the service accessors, and the loader tests are deleted.
+5. The branded application installs the mandatory middleware and still allows application middleware; resource-free application construction is separate from production service opening; the lifecycle is `boot`.
+
+Verification: positive and negative compile fixtures cover all three handler arguments and the reserved `raw` field; server tests prove mandatory and application middleware ordering; valid and invalid bodies and path parameters are exercised through listener-free requests; both generated contracts are compared against their checked-in copies; configuration failure is proven to precede resource acquisition; and both real executables were smoke-tested through startup and bounded shutdown, including a two-process run against a disposable database.
 
 ## Sources
 
