@@ -59,6 +59,7 @@ M2 is the active roadmap milestone. M3 is scoped and ready for implementation pl
 
 Durable decisions are under `decisions/`. Research remains under `research/` only when it is useful beyond one Epic.
 
+- [Controller and service vocabulary](decisions/controller-service-vocabulary.md) — the tier vocabulary the framework, the Control API, and the daemon use.
 - [Restart-only server framework proposal](research/restart-only-server-framework.md) — proposed startup, typed feature, OpenAPI, and listener-free testing contracts.
 
 ## Plans
