@@ -48,10 +48,13 @@ export interface ControlApiContext {
     readonly config: Readonly<ControlApiConfig>;
     readonly database: {
         readonly workflows: WorkflowOperations;
-        readonly readiness: (signal: AbortSignal) => Promise<Readiness>;
     };
+    readonly readiness: (signal: AbortSignal) => Promise<Readiness>;
     readonly abortSignal: AbortSignal;
 }
+```
+
+`readiness` stays outside `database` because it aggregates more than the database: the Control API's own connection and the daemon it calls.
 
 export const CONTROL_API_TAG = {
     SYSTEM: "system",
