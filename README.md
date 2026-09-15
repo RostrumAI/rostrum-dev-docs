@@ -66,3 +66,4 @@ Durable decisions are under `decisions/`. Research remains under `research/` onl
 A plan covers one scoped workstream within one technical Epic. Delete it after completion once durable information has moved into code, an Epic, a specification, or a decision record. Git history retains the completed plan.
 
 - [M2 Epic 1: Implement the daemon network boundary](plans/m2-epic-1-daemon-network-boundary.md) — proposed implementation plan.
+- [Rename the service framework vocabulary and split the application tiers](plans/handler-service-vocabulary.md) — proposed implementation plan.
