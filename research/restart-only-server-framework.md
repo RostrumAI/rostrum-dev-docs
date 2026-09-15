@@ -5,7 +5,21 @@ Status: Proposed architecture and implementation direction
 Applies to: `@rostrum/server`, `@rostrum/daemon`, and `@rostrum/control-api`
 
 Last researched: 2026-09-14
+
 Terminology: route modules are **services**, not feature slices. This is a naming and directory change only: `/features/workflows/create.ts` becomes `/services/workflows/create.ts`.
+
+## Implementation status (2026-09-15)
+
+Restart-only configuration and lifecycle are delivered; the typed service API and `boot` remain proposed.
+
+Delivered:
+
+- Configuration is read once and immutable. `ServiceConfigSource.load()` returns a frozen configuration, including its token list and direct TLS material, and production calls it exactly once per process.
+- Application-managed reload is gone. Candidate comparison, dependency and listener fingerprints, listener replacement, and resource retirement were deleted; `ServiceRuntimeConfig` replaces `ReloadableServiceConfig`; SIGHUP logs `restart required` and reads nothing.
+- One bounded shutdown deadline covers accepted requests, response bodies tracked to completion, and exactly-once resource close.
+- Each production service owns its configuration and resources and exposes `fetch(request, abortSignal)`; a request runs on the configuration that opened the process's connection.
+
+Still proposed: `defineConfig` and `loadConfig`, `boot(root, definition, open)`, `createServiceBuilder`, the branded `createServerApp` and `createServiceRegistrar`, package-owned mandatory middleware, strict JSON body and path-parameter validation, OpenAPI translation from service values, and the `features/` → `services/` route migration.
 
 ## Decision
 
