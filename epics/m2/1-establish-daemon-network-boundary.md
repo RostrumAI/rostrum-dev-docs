@@ -1,6 +1,6 @@
 # Epic 1: Establish the daemon network boundary
 
-Status: Planned
+Status: Complete
 
 Roadmap milestone: [M2: Local workflow execution](../../strategy/product-roadmap.md#3-delivery-milestones)
 
