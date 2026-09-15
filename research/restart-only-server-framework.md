@@ -19,7 +19,7 @@ await boot(import.meta.dir, daemonConfig, Daemon.open);
 
 `boot` loads and validates configuration, initializes logging, asks the service to open its database-backed resources and application, binds Bun, and owns bounded shutdown. The service factory owns database-specific construction.
 
-Service modules export one value containing schemas, the complete route, OpenAPI metadata, responses, and `handler(context)`. Each daemon or application defines the additional fields placed on that Hono context.
+Service modules export one value containing schemas, the complete route, OpenAPI metadata, responses, and `handler(request, response, context)`. Each daemon or application defines the fields in `context`; the framework adds only `context.raw`.
 
 ## Target API
 
@@ -48,7 +48,7 @@ export const defineControlService =
     createServiceBuilder<ControlApiContext, ControlApiTag>();
 ```
 
-`ControlApiContext` is an example, not a framework interface. Another daemon may expose different fields. The framework constrains these additions only to an object and rejects names that collide with Hono or framework-provided context fields.
+`ControlApiContext` is an example, not a framework interface. Another daemon may expose different fields. The framework constrains the context to an object that does not define `raw`, which is reserved for the original Hono context.
 
 `CONTROL_API_TAG` is the application's tag enum. Rostrum's `erasableSyntaxOnly` compiler setting rejects native TypeScript `enum`; the `as const` value and derived union provide the runtime values and compile-time constraint without emitted enum code.
 
@@ -79,10 +79,9 @@ export const rewindWorkflow = defineControlService({
         200: { description: "The selected revision is current", body: WorkflowRevisionSchema },
         404: { description: "The workflow or revision does not exist", body: ErrorResponseSchema },
     },
-    handler: async (context) => {
-        const { req, database, abortSignal, json } = context;
-        const body = req.valid("json");
-        const params = req.valid("param");
+    handler: async (request, response, context) => {
+        const { body, params } = request;
+        const { database, abortSignal } = context;
 
         const result = await database.workflows.rewind(
             params.workflowId,
@@ -90,16 +89,20 @@ export const rewindWorkflow = defineControlService({
             { signal: abortSignal },
         );
 
-        return json(revisionResponse(result.revision));
+        return response.json(revisionResponse(result.revision));
     },
 });
 ```
 
-The handler receives the original typed Hono context with every field from the application-defined context added at the top level. Handlers destructure the fields they use. Native Hono members such as `req`, `var`, `res`, and `json` remain unchanged.
+The builder infers all three arguments:
 
-Declared body and parameter schemas type Hono's validation store. Handlers read the decoded values through `req.valid("json")` and `req.valid("param")`; native headers remain available through `req.raw.headers`.
+- `request` contains the decoded schema-derived `body`, validated `params`, and native `headers`;
+- `response` exposes Hono's response-facing functions: `header`, `status`, `newResponse`, `body`, `text`, `json`, `html`, `redirect`, `notFound`, `render`, `setRenderer`, `setLayout`, and `getLayout`;
+- `context` contains exactly the application-defined fields plus `raw`, the original typed Hono context for remaining capabilities such as `req`, `var`, `res`, and execution context.
 
-For a declared body, middleware reads the body once, strictly decodes JSON, retains the source text for the Control API's byte-exact workflow document behavior, and validates with TypeBox `Value.Parse` before invoking the handler. Missing, malformed, or schema-invalid bodies receive the standard 400 response. The raw stream is already consumed. The public service API has no form, text, multipart, or custom-decoder variants.
+`response` and `context.raw` reference the same request-local Hono context. `response` is only a narrower type view, so the framework does not copy or rebind Hono methods.
+
+When a service declares `request.body`, middleware reads the body once, strictly decodes JSON, retains the source text for the Control API's byte-exact workflow document behavior, and validates with TypeBox `Value.Parse` before invoking the handler. The inferred result is passed as `request.body`. Missing, malformed, or schema-invalid bodies receive the standard 400 response; the raw stream is already consumed.
 
 ### Explicit routes
 
@@ -181,9 +184,9 @@ This exercises routing, automatic JSON decoding, validation, middleware, the han
 - OpenAPI translation from registered service values;
 - request admission, abort, drain, and exactly-once service close.
 
-The registrar rejects duplicate method/path pairs, mismatched path schemas, bodies on unsupported methods, duplicate operation IDs, invalid responses, missing application tags, and context field collisions.
+The registrar rejects duplicate method/path pairs, mismatched path schemas, bodies on unsupported methods, duplicate operation IDs, invalid responses, missing application tags, and an application context that defines the reserved `raw` field.
 
-The framework does not prescribe application context fields, construct Postgres, discover service files, own domain recovery, or statically prove that an arbitrary raw `Response` matches its documented response schema.
+The framework does not prescribe application context fields, construct Postgres, discover service files, own domain recovery, or statically prove that an arbitrary response matches its documented response schema.
 
 Production services retain immutable configuration and owned resources. Their `fetch(request, abortSignal)` supplies the application-specific context to the app. Database reachability remains readiness behavior; migrations remain an operator command.
 
@@ -195,11 +198,11 @@ M2 still loses in-memory daemon runs on exit. Durable checkpoints, attempts, ide
 
 1. Change the daemon decision and operator guide to startup-only configuration; remove reload and rotation claims.
 2. Make daemon and Control API configuration one-shot and service-owned while preserving precedence, validation, and secret-safe errors.
-3. Add the context-generic service builder, augmented Hono handler context, automatic strict JSON validation, tag constraint, OpenAPI translation, and registrar.
+3. Add the context-generic service builder, inferred request and response arguments, automatic strict JSON validation, reserved `context.raw`, tag constraint, OpenAPI translation, and registrar.
 4. Move route modules from `features` to `services`, add explicit `routes.ts` modules, and delete dynamic discovery, service accessors, and obsolete loader tests.
 5. Add the branded server-app constructor with mandatory middleware and application middleware extension, separate resource-free application construction from production service opening, then replace the lifecycle with `boot`.
 
-Verification must compile positive and negative handler fixtures, prove mandatory and application middleware ordering, exercise valid and invalid JSON through `app.request`, compare generated OpenAPI, verify configuration failure before resource acquisition, and smoke-test both real executables through startup and bounded shutdown.
+Verification must compile positive and negative fixtures for all three handler arguments and the reserved `raw` field, prove mandatory and application middleware ordering, exercise valid and invalid JSON through `app.request`, compare generated OpenAPI, verify configuration failure before resource acquisition, and smoke-test both real executables through startup and bounded shutdown.
 
 ## Sources
 
