@@ -59,7 +59,7 @@ M2 is the active roadmap milestone. M3 is scoped and ready for implementation pl
 
 Durable decisions are under `decisions/`. Research remains under `research/` only when it is useful beyond one Epic.
 
-- [Server bootstrap API alternatives](research/server-bootstrap-api-alternatives.md)
+- [Restart-only server framework proposal](research/restart-only-server-framework.md) — proposed startup, typed feature, OpenAPI, and listener-free testing contracts.
 
 ## Plans
 
