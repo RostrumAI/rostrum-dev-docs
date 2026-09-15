@@ -18,16 +18,14 @@ await boot(import.meta.dir, daemonConfig, Daemon.open);
 
 The call performs the complete production startup sequence: select and load the configuration file, apply exact environment overrides, validate and finalize the configuration, initialize logging, ask the service to open its database-backed resources and application, bind Bun, and install bounded shutdown handling. The service factory owns database-specific construction; the generic lifecycle owns ordering and cleanup.
 
-Feature slices export one feature value containing request schemas, route and OpenAPI information, and a handler. Keeping those fields in one value lets TypeScript derive the handler contract from the schemas without a second annotation or runtime module protocol. A small application-specific builder connects the value to Hono's existing context types. Handlers use:
+Feature slices export one feature value containing request schemas, route and OpenAPI information, and a handler. Keeping those fields in one value lets TypeScript derive the handler contract from the schemas without a second annotation or runtime module protocol. A small adapter invokes each handler with two explicit arguments:
 
-- `context.req.valid("json")` for a runtime-validated, schema-derived body type;
-- `context.req.valid("param")` for runtime-validated, schema-derived path parameters;
-- `context.env` for typed application services;
-- `context.var`, `context.req.raw`, and `context.res` when native Hono access is needed.
+- `request`, containing the validated `body` and `params`, native `Headers`, and the raw typed Hono context;
+- `context`, containing the application's immutable `config`, handler-facing `database` facade, and per-request `abortSignal`.
 
-Do not introduce a second Rostrum request-context wrapper over Hono.
+The common path is `handler: async (request, context) => {}`. `request.raw` preserves the complete Hono API for variables, the underlying request, response inspection, and response builders instead of hiding Hono behind an opaque abstraction.
 
-Build the Hono application independently of production resources. Unit and route tests call `app.request(...)` with controlled bindings and no TCP listener, logger initialization, configuration file, or database connection. Production resource construction and real-process smoke tests remain separate layers.
+Build the Hono application independently of production resources. Unit and route tests call `app.request(...)` with a controlled handler context and no TCP listener, logger initialization, configuration file, or database connection. Production resource construction and real-process smoke tests remain separate layers.
 
 Restart and crash continuity belongs to durable execution, not HTTP bootstrap. M2 still loses daemon run state on exit. M3 must make acknowledged runs survive restart from committed checkpoints; this proposal does not pull that recovery forward or reproduce it inside `@rostrum/server`.
 
@@ -49,27 +47,45 @@ There are no explicit generic arguments, lifecycle callbacks object, dependency 
 
 ### Feature slice
 
-The application defines its Hono environment once:
+The application defines its handler context and OpenAPI tag enum once:
 
 ```ts
+export interface ControlApiDatabase {
+    readonly workflows: WorkflowOperations;
+    readonly readiness: (signal: AbortSignal) => Promise<Readiness>;
+}
+
+export interface ControlApiContext {
+    readonly config: Readonly<ControlApiConfig>;
+    readonly database: ControlApiDatabase;
+    readonly abortSignal: AbortSignal;
+}
+
 export interface ControlApiEnv {
-    Bindings: {
-        readonly workflows: WorkflowOperations;
-        readonly readiness: (signal: AbortSignal) => Promise<Readiness>;
-        readonly signal: AbortSignal;
-    };
+    Bindings: ControlApiContext;
     Variables: {
         readonly requestId: string;
         readonly rawBodyText?: string;
     };
 }
 
-export const defineControlFeature = createFeatureBuilder<ControlApiEnv>();
+export const ControlApiTag = {
+    System: "system",
+    Workflows: "workflows",
+} as const;
+
+export type ControlApiTag =
+    (typeof ControlApiTag)[keyof typeof ControlApiTag];
+
+export const defineControlFeature =
+    createFeatureBuilder<ControlApiEnv, ControlApiTag>();
 ```
 
-A feature then declares its complete boundary in one value. Individual TypeBox schemas remain named exports when another module needs them.
+`ControlApiTag` is the application's runtime enum and compile-time string union. Rostrum enables TypeScript's `erasableSyntaxOnly`, which rejects native `enum` declarations; the `as const` form centralizes the allowed values without emitted enum machinery. A feature must use one of these enum values rather than defining its own tag vocabulary.
 
-Bindings expose service interfaces such as `WorkflowOperations`, not concrete classes with private state. Production supplies `WorkflowService`; tests can supply a structural fake implementing only the contract the handlers consume.
+`ControlApiDatabase` is a handler-facing database facade, not the raw connection or a concrete class with private state. Production can back `database.workflows` with `WorkflowService`; a test can provide a structural fake implementing the same operations.
+
+A feature declares its complete boundary in one value. Individual TypeBox schemas remain named exports when another module needs them:
 
 ```ts
 export const RewindParameters = Type.Object({
@@ -87,7 +103,7 @@ export const rewindWorkflow = defineControlFeature({
         operationId: "rewindWorkflow",
         summary: "Rewind a workflow draft",
         requestBodyDescription: "The target revision to make current",
-        tags: ["workflows"],
+        tags: [ControlApiTag.Workflows],
     },
     responses: {
         200: {
@@ -103,54 +119,65 @@ export const rewindWorkflow = defineControlFeature({
             body: ErrorResponseSchema,
         },
     },
-    handler: async (context) => {
-        const request = context.req.valid("json");
-        const { workflowId } = context.req.valid("param");
+    handler: async (request, context) => {
+        const { body, params, raw } = request;
+        const { database, abortSignal } = context;
 
-        const result = await context.env.workflows.rewind(
-            workflowId,
-            request.targetRevisionId,
+        const result = await database.workflows.rewind(
+            params.workflowId,
+            body.targetRevisionId,
+            { signal: abortSignal },
         );
 
         if (result.outcome === "target-not-found") {
             throw new WorkflowApiError(
                 workflowRevisionNotFound(
-                    `Revision ${request.targetRevisionId} of workflow ${workflowId} does not exist`,
+                    `Revision ${body.targetRevisionId} of workflow ${params.workflowId} does not exist`,
                 ),
             );
         }
         if (result.outcome === "not-found") {
             throw new WorkflowApiError(
-                workflowNotFound(`Workflow ${workflowId} does not exist`),
+                workflowNotFound(`Workflow ${params.workflowId} does not exist`),
             );
         }
 
-        return context.json(revisionResponse(result.revision));
+        return raw.json(revisionResponse(result.revision));
     },
 });
 ```
 
-Inside this handler, TypeScript derives `request` from `RewindRequestSchema`, `workflowId` from `RewindParameters`, services from `ControlApiEnv.Bindings`, and variables from `ControlApiEnv.Variables`. Invalid input receives the application's standard 400 response before the handler runs.
-
-The handler remains a native Hono handler. An exceptional route can use the complete boundary without an adapter:
+Handlers can destructure the complete stable shapes when they need every boundary:
 
 ```ts
-context.var.requestId;
-context.req.raw;
-context.req.header("if-match");
-context.res;
-context.json(body, status);
+handler: async (request, context) => {
+    const { body, headers, params, raw } = request;
+    const { config, database, abortSignal } = context;
+    // Route behavior uses only the members it needs.
+}
 ```
 
-The Control API's JSON decoder reads the request bytes once, performs the existing strict parse, and stores the decoded source text in the typed `rawBodyText` Hono variable before TypeBox validates the feature schema. Workflow create and save can therefore preserve the byte-exact `document` member while `context.req.valid("json")` still returns `StaticParse<TSchema>`. Body validation consumes the request stream, so a handler must not assume `context.req.raw.body` remains unread. Ordinary handlers use the validated value rather than parsing the body again.
+TypeScript derives `body` from `RewindRequestSchema`, `params` from `RewindParameters`, and `context` from `ControlApiContext`. `headers` is the native `Headers` object. Invalid schema input receives the application's standard 400 response before the handler runs.
+
+`raw` is the original typed Hono context, so exceptional routes retain the complete framework boundary:
+
+```ts
+raw.var.requestId;
+raw.req.raw;
+raw.req.header("if-match");
+raw.res;
+raw.json(body, status);
+```
+
+The Control API's JSON decoder reads the request bytes once, performs the existing strict parse, and stores the decoded source text in `raw.var.rawBodyText` before TypeBox validates the feature schema. Workflow create and save can therefore preserve the byte-exact `document` member while `request.body` receives `StaticParse<TSchema>`. Body validation consumes the request stream, so a handler must not assume `raw.req.raw.body` remains unread. Ordinary handlers use the validated value rather than parsing the body again.
 
 ### Listener-free route test
 
-Application construction does not need production dependencies. A test supplies structural fakes as Hono bindings:
+Application construction does not need production dependencies. A test supplies a structural database facade and configuration as the handler context:
 
 ```ts
 const app = createControlApiApp();
-const workflows = new FakeWorkflowService();
+const workflows = new FakeWorkflowOperations();
 
 const response = await app.request(
     `/api/workflows/${workflowId}/rewind`,
@@ -160,9 +187,12 @@ const response = await app.request(
         body: JSON.stringify({ targetRevisionId }),
     },
     {
-        workflows,
-        readiness: async () => ready,
-        signal: new AbortController().signal,
+        config: testControlApiConfig,
+        database: {
+            workflows,
+            readiness: async () => ready,
+        },
+        abortSignal: new AbortController().signal,
     },
 );
 
@@ -170,7 +200,7 @@ expect(response.status).toBe(200);
 expect(await response.json()).toEqual(expectedRevision);
 ```
 
-This exercises real route registration, body and parameter validation, middleware, the feature handler, and response serialization without `Bun.serve()`. Tests that need the real database can open the service and call its `fetch` method directly. Only process and transport smoke tests bind a listener.
+This exercises real route registration, body and parameter validation, middleware, the feature handler, and response serialization without `Bun.serve()` or a database connection. Tests that need the real database can open the service and call its `fetch` method directly. Only process and transport smoke tests bind a listener.
 
 ## Required behavior
 
@@ -220,13 +250,13 @@ Restart-only configuration does not make total recovery engineering free. It rem
 | --- | --- | --- |
 | `ConfigDefinition<C>` | Service/log category, input schema, defaults, environment names, file selection, finalization | Process state, reload, database handles |
 | `loadConfig` | One-shot file/default/environment layering and schema parsing | Logging, resources, listeners |
-| Feature definition | Method, complete path, request schemas, response schemas, OpenAPI prose, handler | Filesystem discovery, production resources |
-| `ControlApiApp` / `DaemonApp` | Middleware, explicit feature registry, validation binding, errors, OpenAPI | Config loading, database construction, process signals |
-| `ControlApi` / `Daemon` | Immutable config, database and domain services, application bindings, recovery when implemented | Signal installation, listener draining |
+| Feature definition | Method, complete path, request schemas, response schemas, enum-backed OpenAPI metadata, two-argument handler | Filesystem discovery, production resources |
+| `ControlApiApp` / `DaemonApp` | Middleware, explicit `routes.ts` registration, validation binding, errors, OpenAPI | Config loading, database construction, process signals |
+| `ControlApi` / `Daemon` | Immutable config, owned database resources, handler context, application, recovery when implemented | Signal installation, listener draining |
 | `boot` | Startup order, logger, listener, request admission, abort controllers, bounded shutdown | Database-specific policy, routes, run recovery |
 | Supervisor | Stop/start replacement and deployment policy | Application configuration parsing |
 
-The framework-facing public surface consists of three cohesive leaf modules: `config` exports `defineConfig`, `ConfigDefinition`, and `loadConfig`; `feature` exports the feature builder, validators, and registry; `lifecycle` exports `boot` and `RunningService`. Protocol schemas, network checks, tokens, readiness, and logging may remain separate leaf utilities, but they do not create competing startup or route-registration conventions.
+The framework-facing public surface consists of three cohesive leaf modules: `config` exports `defineConfig`, `ConfigDefinition`, and `loadConfig`; `feature` exports the feature builder, validators, and single-feature registrar; `lifecycle` exports `boot` and `RunningService`. Protocol schemas, network checks, tokens, readiness, and logging may remain separate leaf utilities, but they do not create competing startup or route-registration conventions.
 
 The dependency direction is one-way:
 
@@ -313,7 +343,7 @@ export interface BootConfig {
 
 export interface RunningService {
     authenticate?(request: Request): Response | undefined;
-    fetch(request: Request, signal: AbortSignal): Response | Promise<Response>;
+    fetch(request: Request, abortSignal: AbortSignal): Response | Promise<Response>;
     close(options: { timeoutMs: number }): Promise<void>;
 }
 
@@ -336,28 +366,28 @@ export async function boot<C extends BootConfig>(
 
 `open` must unwind any resource it acquires before it returns an error. Once it returns a `RunningService`, `boot` owns calling `close` exactly once.
 
-A service object holds the immutable configuration and production resources:
+A service object holds the immutable configuration, owned connection, handler-facing database facade, and application:
 
 ```ts
-export class Daemon implements RunningService {
+export class ControlApi implements RunningService {
     private constructor(
-        private readonly config: DaemonConfig,
-        private readonly database: DatabaseHandle,
-        private readonly app: DaemonApp,
-        private readonly services: DaemonRequestServices,
+        private readonly config: ControlApiConfig,
+        private readonly connection: DatabaseHandle,
+        private readonly database: ControlApiDatabase,
+        private readonly app: Hono<ControlApiEnv>,
     ) {}
 
-    static async open(config: DaemonConfig): Promise<Daemon> {
+    static async open(config: ControlApiConfig): Promise<ControlApi> {
         const options = databaseOptions(config);
         validateDatabaseOptions(options);
 
-        const app = createDaemonApp();
-        const database = createDatabase(options);
+        const app = createControlApiApp();
+        const connection = createDatabase(options);
         try {
-            const services = createDaemonRequestServices(config, database);
-            return new Daemon(config, database, app, services);
+            const database = createControlApiDatabase(config, connection);
+            return new ControlApi(config, connection, database, app);
         } catch (error) {
-            await database.close({ timeoutMs: config.shutdownTimeoutMs });
+            await connection.close({ timeoutMs: config.shutdownTimeoutMs });
             throw error;
         }
     }
@@ -366,28 +396,31 @@ export class Daemon implements RunningService {
         return authenticateRequest(request, this.config.tokens);
     }
 
-    fetch(request: Request, signal: AbortSignal): Response | Promise<Response> {
+    fetch(request: Request, abortSignal: AbortSignal): Response | Promise<Response> {
         return this.app.fetch(request, {
-            ...this.services,
-            signal,
+            config: this.config,
+            database: this.database,
+            abortSignal,
         });
     }
 
     close(options: { timeoutMs: number }): Promise<void> {
-        return this.database.close(options);
+        return this.connection.close(options);
     }
 }
 ```
 
-Database option validation and handle construction happen before listening. Database reachability continues to flow through readiness unless a later durable-recovery plan requires the daemon to complete recovery before admission. Migrations remain an explicit operator command.
+Database option validation and connection construction happen before listening. Database reachability continues to flow through readiness unless a later durable-recovery plan requires the daemon to complete recovery before admission. Migrations remain an explicit operator command.
 
-Request bindings expose only the handler-facing service interfaces. Database URLs, tokens, TLS keys, and other process configuration remain private to the service object unless a feature has a concrete need for a safe derived setting.
+The application-specific context exposes immutable configuration and a database facade with route-level operations such as `database.workflows.rewind`. It does not expose listener control or connection shutdown. `@rostrum/server` only passes the context through and does not know either application's configuration or database types.
 
 ## Typed feature contract
 
-The framework should be small enough to read without reconstructing an implicit plugin protocol. Its compile-time core is an identity builder over Hono's own types:
+The framework should be small enough to read without reconstructing an implicit plugin protocol. Its compile-time core derives a request object from TypeBox schemas and passes the application's Hono bindings as the second argument:
 
 ```ts
+type FeatureEnvironment = Env & { Bindings: object };
+
 interface RequestSchemas {
     readonly body?: TSchema;
     readonly params?: TObject;
@@ -395,20 +428,38 @@ interface RequestSchemas {
 
 type BodyOutput<R extends RequestSchemas> =
     R extends { readonly body: infer B extends TSchema }
-        ? { readonly json: StaticParse<B> }
-        : {};
+        ? StaticParse<B>
+        : undefined;
 
 type ParameterOutput<R extends RequestSchemas> =
     R extends { readonly params: infer P extends TObject }
-        ? { readonly param: StaticParse<P> }
+        ? StaticParse<P>
         : {};
 
 type FeatureInput<R extends RequestSchemas> = {
-    readonly out: BodyOutput<R> & ParameterOutput<R>;
+    readonly out:
+        & (R extends { readonly body: infer B extends TSchema }
+            ? { readonly json: StaticParse<B> }
+            : {})
+        & (R extends { readonly params: infer P extends TObject }
+            ? { readonly param: StaticParse<P> }
+            : {});
 };
 
+export interface FeatureRequest<
+    E extends FeatureEnvironment,
+    Path extends string,
+    Request extends RequestSchemas,
+> {
+    readonly body: BodyOutput<Request>;
+    readonly headers: Headers;
+    readonly params: ParameterOutput<Request>;
+    readonly raw: Context<E, Path, FeatureInput<Request>>;
+}
+
 export interface FeatureDefinition<
-    E extends Env,
+    E extends FeatureEnvironment,
+    Tag extends string,
     Path extends string,
     Request extends RequestSchemas,
 > {
@@ -420,28 +471,34 @@ export interface FeatureDefinition<
         readonly summary: string;
         readonly description?: string;
         readonly requestBodyDescription?: string;
-        readonly tags: readonly string[];
+        readonly tags: readonly [Tag, ...Tag[]];
     };
     readonly responses: Readonly<Record<number, {
         readonly description: string;
         readonly body?: TSchema;
     }>>;
-    readonly handler: Handler<E, Path, FeatureInput<Request>>;
+    readonly handler: (
+        request: FeatureRequest<E, Path, Request>,
+        context: E["Bindings"],
+    ) => Response | Promise<Response>;
 }
 
-export function createFeatureBuilder<E extends Env>() {
+export function createFeatureBuilder<
+    E extends FeatureEnvironment,
+    Tag extends string,
+>() {
     return function defineFeature<
         const Path extends string,
         const Request extends RequestSchemas,
-    >(definition: FeatureDefinition<E, Path, Request>) {
+    >(definition: FeatureDefinition<E, Tag, Path, Request>) {
         return definition;
     };
 }
 ```
 
-The builder owns no runtime state. Its purpose is to contextually type the handler from the schemas and application environment in the same object.
+The builder owns no runtime state. It contextually types `handler(request, context)` from the schemas, application context, path, and tag enum in the same object. The stable request shape avoids repeated `req.valid` calls while `request.raw` preserves every Hono capability.
 
-Route registration adds middleware in one visible order:
+Registration adds middleware and the adapter in one visible order:
 
 ```ts
 app.on(
@@ -449,19 +506,23 @@ app.on(
     feature.path,
     describeRoute(toOpenApi(feature)),
     ...requestValidators(feature.request, options.decodeJson),
-    feature.handler,
+    (raw) => feature.handler(
+        adaptRequest(raw, feature.request),
+        raw.env,
+    ),
 );
 ```
 
-`requestValidators` installs TypeBox validators for declared targets. The body decoder parses once, and each validator returns the `Value.Parse` result through Hono's validation store or the service's standard 400 response on failure. `toOpenApi` receives the same schema objects, so runtime validation and documentation cannot select different request schemas.
+`requestValidators` installs TypeBox validators for declared targets. The body decoder parses once, and each validator returns the `Value.Parse` result through Hono's validation store or the service's standard 400 response on failure. `adaptRequest` reads those validated values, adds `raw.req.raw.headers`, and preserves the original context as `raw`. `toOpenApi` receives the same schema objects, so runtime validation and documentation cannot select different request schemas.
 
-The framework validates at application construction that:
+The registrar validates during application construction that:
 
 - each method and complete path pair is unique;
 - each `:pathParameter` has exactly one property in the parameter object and no extra property exists;
 - a body schema is only registered for a method that accepts a body;
 - every response has a valid HTTP status and description;
-- operation identifiers are unique.
+- operation identifiers are unique;
+- every feature has at least one application enum tag.
 
 Response schemas produce OpenAPI response content directly. They do not use a separate string `schemaName` lookup. Inline schemas are the default; named components are only needed where OpenAPI recursion or meaningful reuse requires them.
 
@@ -469,11 +530,11 @@ Response schemas produce OpenAPI response content directly. They do not use a se
 
 Request body and parameter types are both compile-time and runtime contracts. Response schemas are OpenAPI contracts; existing boundary tests continue to compare observable response bodies and the generated document. Do not claim that an arbitrary raw `Response` is statically proven to match a TypeBox response schema.
 
-The heterogeneous registry requires one deliberate type-erasure point when passing already-checked definitions through Hono's dynamic `app.on` overload. Keep that assertion inside `registerFeatures`; feature modules and handlers contain no casts.
+Hono's dynamic `app.on` overload requires one deliberate assertion inside the package-private adapter that constructs `FeatureRequest`. Feature files, handlers, and `routes.ts` contain no casts.
 
-## Explicit feature registration
+## Explicit route registration
 
-Replace runtime filesystem discovery with a static application registry:
+Replace runtime filesystem discovery with one static `routes.ts` module per application:
 
 ```ts
 import { health } from "./features/system/health";
@@ -481,19 +542,27 @@ import { readiness } from "./features/system/readiness";
 import { createWorkflow } from "./features/workflows/create";
 import { rewindWorkflow } from "./features/workflows/rewind";
 
-const FEATURES = [
-    health,
-    readiness,
-    createWorkflow,
-    rewindWorkflow,
-] as const;
+export function registerRoutes(app: Hono<ControlApiEnv>): void {
+    const register = createFeatureRegistrar(app, {
+        decodeJson: parseControlApiJson,
+    });
 
+    register(health);
+    register(readiness);
+    register(createWorkflow);
+    register(rewindWorkflow);
+}
+```
+
+Application construction invokes that module directly:
+
+```ts
 export function createControlApiApp(): Hono<ControlApiEnv> {
     const app = new Hono<ControlApiEnv>();
 
     app.use("*", requestId());
     app.use("*", accessLog());
-    registerFeatures(app, FEATURES, { decodeJson: parseControlApiJson });
+    registerRoutes(app);
     app.get("/openapi.json", serveOpenApi(app));
     app.notFound(notFound);
     app.onError(serverError);
@@ -502,11 +571,11 @@ export function createControlApiApp(): Hono<ControlApiEnv> {
 }
 ```
 
-A new feature requires a feature file and one explicit registry import. This is preferable to implicit folder-derived paths, runtime module-shape assertions, dynamic imports, duplicate component-name bookkeeping, and type erasure across a 320-line loader. The complete HTTP path is visible in the feature that owns it.
+A new feature requires a feature file and one explicit `register` call in `routes.ts`. Registering each value separately keeps its schema-derived handler type intact and avoids a heterogeneous feature array. This is preferable to implicit folder-derived paths, runtime module-shape assertions, dynamic imports, duplicate component-name bookkeeping, and type erasure across a 320-line loader. The complete HTTP path remains visible in the feature that owns it.
 
-Feature modules must be side-effect-free declarations. Importing the static registry may construct schema values, but configuration validation still precedes application construction, database acquisition, and listener binding.
+Feature modules must be side-effect-free declarations. Importing `routes.ts` may construct schema values, but configuration validation still precedes application construction, database acquisition, and listener binding.
 
-Static registration does not require application resources because Hono bindings arrive on `fetch` or `request`. OpenAPI generation constructs the same application and never calls a handler.
+Static registration does not require application resources because the request context arrives on `fetch` or `request`. OpenAPI generation constructs the same application and never calls a handler.
 
 ## Testing boundaries
 
@@ -514,7 +583,7 @@ Use the narrowest real surface for each behavior.
 
 ### Feature and middleware tests
 
-Construct the application and call `app.request` with fakes. These tests prove routing, validation, typed bindings, errors, and serialization without a listener or database.
+Construct the application and call `app.request` with application-specific contexts containing test configuration, a structural database facade, and an abort signal. These tests prove routing, validation, context adaptation, errors, and serialization without a listener or database connection.
 
 ### Configuration tests
 
@@ -542,15 +611,15 @@ Rejected. Correctness requires request leases, concurrent resource generations, 
 
 ### Dynamic feature discovery
 
-Rejected. Automatic folder scanning saves one registry line per feature but erases static module relationships and requires runtime validation, implicit path derivation, and conflict bookkeeping. Explicit imports are boring and inspectable.
+Rejected. Automatic folder scanning saves one call in `routes.ts` per feature but erases static module relationships and requires runtime validation, implicit path derivation, and conflict bookkeeping. Explicit imports and registration calls are boring and inspectable.
 
 ### A database-aware generic server
 
 Rejected. The startup call should orchestrate resource creation, but `@rostrum/server` should not accept database options or construct Postgres directly. The service factory owns its resource types and remains replaceable in tests.
 
-### A custom Rostrum request context
+### An opaque Hono replacement
 
-Rejected. Hono already provides typed bindings, typed variables, validated request targets, the raw request, and response builders. A wrapper would create a second access convention and need an escape hatch back to the original context.
+Rejected. The selected two-argument adapter organizes the common route inputs but does not conceal Hono. `request.raw` is the original typed Hono context, and `context` is the application's binding object unchanged. A separate framework-owned request or response API would duplicate Hono and require a second escape hatch.
 
 ### Per-service lifecycle copies
 
@@ -560,17 +629,22 @@ Rejected. Daemon and Control API still share admission, drain, abort, listener, 
 
 Throwaway strict-TypeScript prototypes exercised the proposed seams without changing tracked implementation files.
 
-The feature prototype established:
+The revised feature prototype established:
 
-- request body and path parameter types were inferred from TypeBox schemas;
-- invalid property access was rejected by TypeScript through negative compile assertions;
-- Hono bindings and variables were typed;
-- `context.req.raw`, `context.var`, and `context.res` remained available;
-- a valid in-process request returned 201 and called the fake service once;
-- an invalid body returned 400 and did not call the service;
-- a heterogeneous static registry mounted body-bearing and body-free features through one internal type-erasure point;
-- `hono-openapi` generated `/owners/{owner}/records` from the same feature definition;
-- no Bun listener was started.
+- TypeBox schemas inferred `request.body` and `request.params`;
+- invalid body and context property access was rejected through negative compile assertions;
+- handlers received separate typed `request` and application `context` arguments;
+- `request.headers` was the native `Headers` object;
+- `request.raw` preserved the typed Hono request, variables, response, and response builders;
+- `context` exposed immutable configuration, a structural `database.workflows` facade, and the request abort signal;
+- `routes.ts`-style individual registration mounted body-bearing and body-free features without a heterogeneous feature array;
+- a valid listener-free request returned 200 with the expected body;
+- an invalid body returned 400 and the fake workflow operation was called only for the valid request;
+- no Bun listener or database connection was started.
+
+The tag enum prototype initially used native TypeScript `enum` syntax. The repository compiler rejected it with TS1294 because `erasableSyntaxOnly` is enabled. The `as const` `ControlApiTag` runtime enum and derived union compiled under the real root configuration and retained centralized tag values.
+
+An earlier feature prototype also confirmed that `hono-openapi` generated `/owners/{owner}/records` from the same schemas and metadata used for registration.
 
 The restart-only startup prototype compiled without explicit generic arguments and exercised a real Bun listener. Its observed order was logger initialization, service-factory invocation, listener binding, request handling, then resource close. The response was 200. A separate in-process application request covered the same route without startup.
 
@@ -594,24 +668,28 @@ These prototypes validate the API shape, not the complete implementation. The im
 
 ### 3. Introduce typed feature definitions
 
-- Add the small `createFeatureBuilder`, TypeBox validation middleware, OpenAPI translation, and registry checks.
-- Create one environment type per application so feature handlers receive typed bindings and variables.
-- Convert body and path validation to `context.req.valid` and keep the strict source-preserving decoder for workflow create/save.
+- Add the small `createFeatureBuilder`, TypeBox validation middleware, OpenAPI translation, and single-feature registrar.
+- Define one handler context and one tag enum object per application.
+- Adapt validated values into `request.body`, `request.params`, native `request.headers`, and the original Hono context at `request.raw`.
+- Pass immutable `config`, the handler-facing `database` facade, and `abortSignal` as the second handler argument.
+- Keep the strict source-preserving decoder for workflow create/save.
 - Move repeated domain-error translation to the application error boundary where observable behavior remains identical.
 
-### 4. Replace discovery with explicit registries
+### 4. Replace discovery with explicit route modules
 
 - Give every feature its complete route path.
-- Register imported feature values in `ControlApiApp` and `DaemonApp`.
+- Add one `routes.ts` per application that statically imports and registers each feature value.
+- Register each feature separately rather than constructing a heterogeneous array.
 - Generate OpenAPI from the registered definitions and their direct schema objects.
 - Remove `loadFeatures`, `FeatureHandlerFactory`, `ServiceAccessor`, folder-derived paths, and obsolete module-shape tests.
 
 ### 5. Separate application and production resources
 
 - Make each application constructible with no configuration or database.
-- Define handler-facing service interfaces and make production classes implement them; do not type bindings as concrete classes with private state.
-- Make each production service own immutable configuration, database handle, domain services, and application.
-- Pass production bindings through `app.fetch`; pass fake bindings through `app.request` in unit tests.
+- Define an application context containing immutable `config`, a handler-facing `database` facade, and `abortSignal`.
+- Keep the raw database connection and its lifecycle methods on the production service rather than exposing them to handlers.
+- Make each production service own immutable configuration, database connection, domain facade, and application.
+- Pass the production context through `app.fetch`; pass a structural fake context through `app.request` in unit tests.
 - Keep database integration tests and real-process smoke tests distinct.
 
 ### 6. Replace the lifecycle
@@ -622,9 +700,10 @@ These prototypes validate the API shape, not the complete implementation. The im
 
 ### 7. Verify observable behavior
 
-- Compile positive and negative handler-type fixtures.
-- Exercise valid and invalid body/parameter requests through `app.request` with no listener.
-- Prove raw Hono access and application variables remain available.
+- Compile positive and negative fixtures for the two-argument handler, schema-derived body and parameters, application context, and tag enum.
+- Exercise valid and invalid body/parameter requests through `app.request` with no listener or database connection.
+- Prove `request.raw` retains Hono request, variable, response, and response-builder access.
+- Prove `routes.ts` registers body-bearing and body-free features without dynamic discovery.
 - Compare offline, in-process served, and checked-in OpenAPI documents.
 - Prove configuration precedence and invalid startup failure before resource acquisition.
 - Exercise both real executables for listener/TLS startup, readiness, authentication, graceful drain, deadline abort, exactly-once close, and exit status.
