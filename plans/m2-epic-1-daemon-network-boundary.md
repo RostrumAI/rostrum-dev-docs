@@ -2,9 +2,19 @@
 
 Epic: [M2 Epic 1: Establish the daemon network boundary](../epics/m2/1-establish-daemon-network-boundary.md)
 
-Status: Proposed implementation plan; implementation has not started.
+Status: Checkpoints 1–4 recorded complete; restart-only supersession applied 2026-09-15.
 Owner: Implementing agent. Review requirements and the autonomous directory-move exception are defined below.
 Last researched: 2026-09-11.
+
+## Restart-only supersession (2026-09-15)
+
+[Restart-only server framework proposal](../research/restart-only-server-framework.md) replaces application-managed configuration reload. Where this plan describes SIGHUP reload, rotation without restart, listener replacement, resource retirement, or a second shutdown deadline, that text is retired.
+
+The implementation now reads configuration, tokens, and direct TLS material once at process start and treats them as fixed for the process lifetime. SIGHUP logs that a restart is required and changes nothing. Token rotation is restart-based; the daemon still accepts every token in its configured set, and the Control API still sends only the newest. Shutdown runs under one deadline that covers accepted requests and response bodies as well as owned-resource closure.
+
+The same change replaced the route-module mechanics this plan describes: `@rostrum/server` now owns the branded application, the typed service builder, service registration, OpenAPI translation, request validation, and `boot`. Route modules live under `src/services/` and are registered from one static `routes.ts` per application, so the filesystem scan, dynamic import, service accessors, and the loader are gone. Contract generation is unchanged in substance: both services still check in their generated OpenAPI document, and every path, method, status code, and component name survived the migration. Operation identifiers and operation summaries are now declared per service, and the Control API document lists the tags it uses; those are deliberate changes to the generated artifacts.
+
+Reload code, its fingerprints, and the reload integration suite were deleted. Restart-only behaviour is covered by `packages/server/src/restart.test.ts` and the token/configuration case in `apis/daemon/src/boundary.test.ts`; the framework's own contracts are covered by `packages/server/src/app.test.ts`, `service.type-fixtures.ts`, and `config.test.ts`; the operator guide is `README.md` in the implementation repository. The remaining checkpoints, verification table rows, and configuration-contract rows below still describe delivered transport, authentication, database, and readiness behaviour, and stay authoritative for those subjects.
 
 ## Purpose
 

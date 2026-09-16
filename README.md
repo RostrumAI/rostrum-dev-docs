@@ -59,9 +59,13 @@ M2 is the active roadmap milestone. M3 is scoped and ready for implementation pl
 
 Durable decisions are under `decisions/`. Research remains under `research/` only when it is useful beyond one Epic.
 
+- [Controller and service vocabulary](decisions/controller-service-vocabulary.md) — the tier vocabulary the framework, the Control API, and the daemon use.
+- [Restart-only server framework proposal](research/restart-only-server-framework.md) — proposed startup, typed feature, OpenAPI, and listener-free testing contracts.
+
 ## Plans
 
 A plan covers one scoped workstream within one technical Epic. Delete it after completion once durable information has moved into code, an Epic, a specification, or a decision record. Git history retains the completed plan.
 
 - [M2 Epic 1: Implement the daemon network boundary](plans/m2-epic-1-daemon-network-boundary.md) — proposed implementation plan.
 - [M2 Epic 2: Implement sequential workflow execution](plans/m2-epic-2-sequential-workflows.md) — proposed implementation plan.
+- [Rename the service framework vocabulary and split the application tiers](plans/handler-service-vocabulary.md) — proposed implementation plan.
