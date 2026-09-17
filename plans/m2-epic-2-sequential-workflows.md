@@ -50,12 +50,17 @@ These are proposals for this PR, not claims of implemented or approved behavior:
 - **Use asynchronous invocation.** POST returns 202 after the daemon accepts a run, not after the workflow finishes. GET returns the current observation.
 - **Make workload limits operator settings.** Body/snapshot sizes are deployment choices; depth also needs a conservative implementation ceiling. The rationale and configuration contract are below.
 - **Generalize outstanding-work tracking.** Extend the existing HTTP lifecycle tracker to cover accepted runs, rather than adding a run-specific shutdown callback.
+- **Traverse the graph by visits, not by a chain.** Control edges create the next visits; declared `dependencies` decide when a visit may run. The engine holds no current-step pointer, so fan-out, joins, conditionals, and loops change what a node returns rather than how a run is represented.
+- **Keep visit records append-only and derive the rest.** The frontier, the step observations, and the run status are folds over the records, so no cached state can disagree with them, and M3 durability becomes persisting the records instead of redesigning the state machine.
+- **Treat quiescence as a failure.** A run with no running visit, no ready visit, and blocked visits left over can never progress. The daemon fails it with a located cause instead of leaving a caller polling a run that never changes.
+- **A step may not depend on itself.** Publication validation refuses a self-dependency, because such a step can never become eligible and would surface only as quiescence at run time.
 
 Review API/data contracts and presence rules with the API/specification owners, and task completion/shutdown with a concurrency reviewer. Preserve [workflow v1 compatibility](../specifications/workflow-interface-v1.md#breaking-and-additive-changes), the [controller/service boundary](../decisions/controller-service-vocabulary.md), and the [restart-only lifecycle](../research/restart-only-server-framework.md#decision).
 
 ## Progress
 
-- [ ] Agree invocation, task-work, observation, configuration, and lifecycle contracts.
+- [x] Agree invocation, task-work, and observation contracts (checkpoint 1). Configuration and lifecycle contracts remain with checkpoints 3 and 4.
+- [ ] Rework checkpoint 2 around the visit-based run state and the advancement pass described under Implementation approach; PR [#64](https://github.com/RostrumAI/rostrum/pull/64) is superseded on the engine side.
 - [ ] Build and demonstrate daemon-local execution directly.
 - [ ] Connect invocation and inspection through both services.
 - [ ] Verify independence, work tracking, shutdown, and operator setup.
@@ -69,6 +74,9 @@ The implementing engineer owns these steps. Each checkpoint must leave the repos
 - Add shared execution data contracts, the daemon-local task executor interface, and preparation that validates capabilities and compiles value schemas without executing work.
 - Clarify presence/reference/result rules in the workflow specification; preserve existing publication validation and digest vectors.
 - **Done when:** supported publications produce a prepared graph; unsupported behavior and invalid inputs reject before any run exists. Contract changes have API/specification review.
+- **Implementation PR:** [#64](https://github.com/RostrumAI/rostrum/pull/64), branch `feat/m2-sequential-checkpoint-1`. Shared contracts are in `packages/workflow/src/execution.ts` (`@rostrum/workflow/execution`); the task boundary and preparation are in `apis/daemon/src/services/runs/execution/`, with `README.md` beside them.
+- **Verification:** `bun run check` clean; `bun run lint` clean apart from pre-existing warnings in untouched files; `bun test` 505 pass, 0 fail, including the shared-contract, preparation, schema, and JSON-guard tests added here. A direct preparation run (no HTTP, no Postgres) resolved the worked example's bindings and accepted its frozen inputs, refused a string amount, a missing input, and an undeclared input as `invalid_inputs` with distinct codes and locations, refused an unknown operation as `unsupported_execution`, and refused unparseable stored content as `corrupt_publication`. The specification's [execution preparation](../specifications/workflow-interface-v1.md#execution-preparation) section states the clarified rules; publication validation and its digest vectors are unchanged.
+- **Review:** the shared contracts and the specification clarification require API/specification review. The repository's automated review runs on the pull request, and a self-review pass fixed three boundary defects before it (references to non-schema positions, uninspectable values throwing instead of refusing, and lenient array-index pointers). Human contract review is still outstanding, so this checkpoint's contract work is implemented but not yet accepted.
 
 ### 2. Build the local execution cycle
 
@@ -122,6 +130,42 @@ flowchart TB
 
 This preserves the graph structure without implementing conditionals or loops early. Current unsupported constructs still reject at invocation; preparation does not silently flatten them or change which documents can be published.
 
+### Run state, traversal, and node visits
+
+A **step definition** is what the document declares. A **visit** is one activation of a definition within one run. M2 creates one visit per reached step, but a visit is never identified by `stepId` alone: a loop creates further visits of the same definition, and M3 creates further attempts inside one visit. The pair that identifies a visit is `(stepId, activation)`, where `activation` is `null` outside loops and `{ loopStepId, index }` inside one. v1 forbids nested loops, but two loops may share a body step, so the loop step is part of the key.
+
+Each visit is an append-only JSON record:
+
+| Field | Meaning |
+| --- | --- |
+| `nodeId` | The visit's own identity, minted by the daemon. |
+| `stepId` | The definition this visit activates. |
+| `activation` | Which activation of that definition: `null`, or `{ loopStepId, index }`. |
+| `status` | `blocked`, `ready`, `running`, `succeeded`, or `failed`. |
+| `workId` | The outstanding execution while `running`. |
+| `output`, `failure` | The settled result, present only after settlement. |
+| `createdAt`, `startedAt`, `completedAt` | Timestamps for inspection. |
+
+The run owns its records; nothing looks up a run from a visit. Caller-facing inspection projects a definition with no visit, and a `blocked` visit, to `pending`; `ready`, `running`, `succeeded`, and `failed` keep their names.
+
+**Creation follows control edges.** When a visit succeeds, the engine asks the node for the activations to ensure and creates a visit for each. A task step returns its `successors`; a conditional node later returns the chosen branch, and a loop node its next iteration or its successor. Creation is idempotent on `(stepId, activation)`: a second predecessor proposing the same visit finds the existing record and appends nothing.
+
+**Eligibility follows declared dependencies.** A created visit stays `blocked` until every step in its `dependencies` has a succeeded visit in the same activation scope. Both mechanisms are required: control edges decide that a visit exists, dependencies decide that it may run. A step reached by two predecessors is created by the first and released by the second, and a dependency that fails releases nothing.
+
+**Completion is idempotent on `(workId, status === "running")`.** A result whose `workId` does not match the visit's outstanding work, or that arrives for a settled visit, changes nothing. Creation and completion are separate guards with separate keys.
+
+**Advancement is one synchronous pass per trigger.** A trigger is a settled visit or an accepted run. The pass runs to a fixpoint and never awaits:
+
+1. Create a visit for every activation of every settled visit.
+2. Promote `blocked` to `ready` where the dependency gate is satisfied.
+3. Dispatch at most one `ready` visit, recording `workId` and `running` before the executor is called, so an executor that settles synchronously cannot outrun its own record.
+
+Because the pass contains no `await`, it is atomic against other triggers on the event loop and needs no per-run lock. Dispatch is the only work that leaves the pass; its completion re-enters as a new trigger.
+
+**A run that cannot progress fails.** A pass that finds no `ready` visit, no `running` visit, and at least one `blocked` visit has a run that will never change again: nothing is in flight to open a gate. The daemon fails that run with a located failure naming the unmet dependency. A self-dependency reaches this state today (see Discoveries); in a correct document it is an engine invariant.
+
+**Run status is derived from the records.** No visits is `queued`; any visit ready, running, or blocked is `running`; a failure that stopped dispatch while work settles is `running` with `stopping: true`; a settled `result` visit is `succeeded`; a terminal failure is `failed`. Deriving the status keeps the observation coherent by construction.
+
 ### One task execution, from ready to completed
 
 The hand-off below starts after input validation. Only the daemon can commit a task outcome and release more work:
@@ -151,13 +195,13 @@ sequenceDiagram
     end
 ```
 
-1. **Select:** the daemon advances one run and identifies a reached step whose required predecessors have succeeded. It marks eligible work ready.
+1. **Select:** the run's advancement pass creates visits from settled predecessors, releases those whose dependency gate is satisfied, and marks the next eligible visit ready (see run state, traversal, and node visits).
 2. **Bind:** resolve literals/references and validate the operation's complete input object. A binding/input failure fails that step without invoking the task executor.
 3. **Dispatch:** allocate a unique `workId`, record the outstanding step execution, mark it running, and send one `TaskWorkItem` to the executor. Record ownership before calling code that may settle synchronously.
 4. **Execute:** the executor selects the operation implementation and calls it once. It returns a success value or typed failure; unexpected throws/rejections become a sanitized task failure.
 5. **Match:** the daemon matches the result to the outstanding run/work IDs. Unknown, stale, or already-settled results cannot change state. A repeated completion must not commit output or release a successor twice.
 6. **Commit:** validate the whole output against operation and author-declared schemas, enforce the snapshot budget, then commit the owned output and successful step state together. Invalid output fails the step without exposing any portion downstream.
-7. **Continue:** schedule another advancement of that run on a later event-loop turn. It selects the next step or completes through `result`; the worker does not choose the continuation.
+7. **Continue:** the next advancement pass creates the settled visit's successors, then dispatches them or completes the run through `result`; the worker does not choose the continuation.
 
 The internal boundary is deliberately small:
 
@@ -323,13 +367,28 @@ Run the example directly and through actual service entry points. Use test-only 
 - Publishable does not yet mean executable: validation permits missing task config, unknown operation names, and malformed value-schema fragments. Execution preparation must reject these without changing publication validity.
 - TypeBox compilation can accept malformed schemas and asserts formats by default. Schema validation and annotation handling are separate from successful compilation.
 - Existing shutdown already distinguishes request cancellation from tracked completion. Extending that mechanism avoids a competing shutdown system for runs.
+- TypeBox's `Static` degrades to `never` under this repository's compiler when a schema is built from a computed array (`Type.Union(codes.map(...))`). The failure-code and rejection-reason sets stay single-sourced and compile correctly as a JSON Schema `enum`.
+- The installed TypeBox compiler enforces some keywords outside 2020-12 (`dependencies`, `dependentRequired`) and ignores unknown ones, so an unrecognized assertion keyword would silently weaken validation. Fragments are therefore validated against offline 2020-12 meta-schemas before compilation, and the capabilities this release cannot vouch for are refused.
+- A plain self-`$ref` exhausts the compiler stack while compiling, so recursive fragments are refused rather than compiled.
+- TypeBox's `Errors()` returns a bounded batch of failing items per call: a document with 40 malformed steps produced 16 shape findings. The refusal list is capped by preparation itself, not by the library.
+- Reading a canonical document through a strict parse and then narrowing it to a typed document keeps the untyped-to-typed transition at one reviewed place; preparation re-runs the shared validator so a daemon never executes content that this release's rules would not accept.
+- A step that lists itself in `dependencies` passes publication validation today: the validator returned `validForPublication: true` with no findings. Cycle detection runs over control edges only, and the dominator sets include the node itself, so the merge-after-branch check accepts a self-dependency. Such a step can never become eligible, so a run would reach it only as quiescence. The gap predates this branch, and the fix belongs in the graph stage.
 
 ## Decision log
 
 - 2026-09-16: retain the delivered controller/service split and restart-only framework.
 - 2026-09-16 review revision: propose daemon-local execution, a per-task work/result boundary, graph-preserving preparation, configurable workload limits, and generalized work tracking. Keep invocation idempotency with the governing M3 durability Epic.
+- 2026-09-17 checkpoint 1: shared execution contracts live in `@rostrum/workflow/execution`; the prepared graph is a serializable projection of the validated document (steps keyed by id with successors, dependencies, bindings, and compiled checks) rather than a retained `WorkflowGraph` instance, so one prepared definition can be shared without mutable engine state.
+- 2026-09-17 checkpoint 1: a task step's `config` is exactly the supported operation declaration. Preparation refuses an unknown operation, an undeclared configuration member, configuration on a `result` step, more than one distinct successor, a `loop`, or a `conditional`, without changing which documents publish.
+- 2026-09-17 checkpoint 1: document-level problems refuse as `unsupported_execution` and input problems as `invalid_inputs`; a refusal carries at most 32 sanitized failures, each located by JSON Pointer at the offending member, including missing and undeclared members.
+- 2026-09-17 checkpoint 1: declared value fragments are validated against offline 2020-12 resources before TypeBox compilation. `format` is an annotation stripped from the compiled copy's schema positions, schema defaults are never applied, and `$id`, dynamic-scope keywords, external or unresolved references, and recursive references refuse as unsupported.
+- 2026-09-17 checkpoint 1 open item for checkpoint 3: both services must keep the single application error envelope. How a domain `RunInvocationRejection` and its failures appear in that envelope is checkpoint 3's contract decision.
+- 2026-09-17 run-state design: a run is a set of append-only visit records keyed by `(stepId, activation)`. Control edges create visits, declared dependencies gate eligibility, one synchronous advancement pass runs to a fixpoint after each settled visit, and run status is derived from the records. The engine-side shape of PR [#64](https://github.com/RostrumAI/rostrum/pull/64) is superseded by this model; the shared execution contracts and preparation are unaffected.
+- 2026-09-17 run-state design: the activation discriminator is `{ loopStepId, index }`, null outside loops. `nodeContext` was rejected because context already names the controller, request, and validation contexts in this repository, and a bare `loopIndex` because two loops may share a body step.
+- 2026-09-17 run-state design: creation and completion are separately idempotent — creation on `(stepId, activation)`, completion on `(workId, running)` — and a pass that finds nothing runnable while visits remain blocked fails the run.
+- 2026-09-17 validation gap: the graph stage must refuse a step that lists itself in `dependencies`; the engine's quiescence failure is the backstop, not the fix.
 - Record approvals or changed contracts here before dependent implementation; review comments and proposed designs are not implementation evidence.
 
 ## Outcome
 
-No execution implementation has shipped. Complete the checkpoints, record implementation PRs and verification results, then move lasting contracts into the specification/code and retire this plan.
+Checkpoint 1 landed the shared execution contracts, the task boundary, and preparation that refuses unsupported publications and invalid inputs before a run exists (implementation PR [#64](https://github.com/RostrumAI/rostrum/pull/64)). Execution itself has not shipped: complete checkpoints 2 through 4, record their implementation PRs and verification results, then move lasting contracts into the specification/code and retire this plan.
