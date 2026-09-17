@@ -103,6 +103,17 @@ The implementing engineer owns these steps. Each checkpoint must leave the repos
 
 ### Prepared graph and run state
 
+Each invocation owns its state and work IDs. An immutable prepared definition may be reused without sharing progress or introducing a required compilation cache:
+
+```mermaid
+flowchart TB
+    Definition["Prepared workflow<br/>(read-only)<br/>Publication + step graph<br/>Checks + bindings"]
+    Definition -->|Read-only use| RunA["Run A - private state<br/>Inputs, step executions,<br/>outputs and failures"]
+    Definition -->|Read-only use| RunB["Run B - private state<br/>Inputs, step executions,<br/>outputs and failures"]
+    RunA --> WorkA["Run A task work items<br/>Each execution has its own work ID"]
+    RunB --> WorkB["Run B task work items<br/>Each execution has its own work ID"]
+```
+
 - A **prepared workflow** contains the exact publication binding, entry step, step definitions keyed by ID, successor/dependency relationships, compiled value checks, and input bindings. Reuse `WorkflowGraph` and the existing reference grammar rather than create another interpretation of the document.
 - Preparation checks that this release can execute every declared step. M2 Epic 2 permits one reached successor at a time, dependencies on earlier reached steps, and a terminal result. Duplicate edges to one target do not execute it twice; supported disconnected steps remain pending and inspectable.
 - A **run** separately owns invocation inputs, step-execution records, ready/running work, committed outputs, failures, and terminal state. Sharing prepared definitions must never share this mutable state between invocations.
@@ -112,6 +123,33 @@ The implementing engineer owns these steps. Each checkpoint must leave the repos
 This preserves the graph structure without implementing conditionals or loops early. Current unsupported constructs still reject at invocation; preparation does not silently flatten them or change which documents can be published.
 
 ### One task execution, from ready to completed
+
+The hand-off below starts after input validation. Only the daemon can commit a task outcome and release more work:
+
+```mermaid
+sequenceDiagram
+    participant D as Daemon run service
+    participant E as Local task executor
+    Note over D,E: Both roles are inside the daemon process in M2
+    D->>D: Record workId and mark the task running
+    D->>E: TaskWorkItem with config and resolved inputs
+    E->>E: Execute this operation only
+    E-->>D: TaskWorkResult with runId and workId
+    D->>D: Match result to outstanding work
+    alt Unknown, stale, or already-settled work
+        D->>D: Ignore result without changing state
+    else Matching task failure
+        D->>D: Fail step and stop this run's new dispatch
+    else Matching task success
+        D->>D: Validate whole output and snapshot budget
+        alt Valid output within budget
+            D->>D: Commit output and step success
+            D->>D: Schedule this run's next turn
+        else Invalid or oversized output
+            D->>D: Fail step without exposing candidate output
+        end
+    end
+```
 
 1. **Select:** the daemon advances one run and identifies a reached step whose required predecessors have succeeded. It marks eligible work ready.
 2. **Bind:** resolve literals/references and validate the operation's complete input object. A binding/input failure fails that step without invoking the task executor.
@@ -145,6 +183,33 @@ A later remote worker can implement the same responsibility, but the message sha
 - On failure, stop dispatch for that run and settle any running work before marking it failed. Inspection can show `running` with `stopping: true` during that drain. Keep prior successful outputs, publish no final result, clear terminal `currentSteps`, and never change a terminal outcome.
 
 ### Invocation and the HTTP contract
+
+Acceptance separates the HTTP request from daemon-owned execution. This example shows a successful invocation and later inspection; reply delivery and execution do not wait for each other:
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant A as Control API
+    participant D as Daemon
+    participant P as Postgres
+    C->>A: POST /api/runs (publication, inputs)
+    A->>D: Authenticated invocation
+    D->>P: Read the exact publication
+    P-->>D: Stored publication
+    D->>D: Verify integrity, support, inputs and limits
+    D->>D: Register run and schedule advancement
+    par Return acceptance
+        D-->>A: 202 + runId + publication binding
+        A-->>C: 202 + runId + public Location
+    and Daemon-owned execution
+        D->>D: Advance tasks and commit outcomes
+    end
+    Note over C,D: Caller disconnect or Control API restart does not cancel the run
+    C->>A: Later GET /api/runs/:runId
+    A->>D: Inspect this run
+    D-->>A: In-memory run snapshot
+    A-->>C: 200 + progress or outcome
+```
 
 - Both services expose `POST /api/runs` and `GET /api/runs/:runId`. The daemon routes retain private bearer authentication; all run responses use `Cache-Control: no-store`.
 - POST accepts an exact `workflowId`, integer `publicationNumber`, and object `inputs` (absent means `{}`). Reject unknown envelope fields. New run-route IDs use lowercase UUID v7; existing authoring-route behavior stays unchanged.
@@ -193,7 +258,21 @@ To keep every accepted run inspectable:
 
 ### Generalized work tracking and shutdown
 
-A list of cancellation signals is not enough: a signal requests cancellation, but does not prove that an operation has finished. Track cancellation and completion together.
+The tracker waits for completion, not merely an abort signal. One shutdown deadline covers both the drain and resource closure:
+
+```mermaid
+flowchart TB
+    Signal["SIGTERM or SIGINT"] --> Admission["Close new admission<br/>Start one deadline"]
+    Admission --> Drain["Wait for completion:<br/>HTTP bodies, accepted runs,<br/>pending I/O"]
+    Drain -->|All work settled| Close["Close owned resources<br/>Use remaining time"]
+    Close -->|Success before deadline| Clean["Exit 0"]
+    Drain -->|Deadline expires| Force["Abort unfinished work<br/>Force-close connections<br/>Attempt remaining cleanup"]
+    Close -->|Deadline expires| Force
+    Close -->|Cleanup fails| Failed["Exit nonzero"]
+    Force --> Failed
+```
+
+Accepted runs can dispatch their remaining tasks while draining. Terminal runs release their registrations even when they failed; retained snapshots do not block a clean exit.
 
 - Create one process-owned work tracker in `boot`. Each registration has an identity, an `AbortController`, and an explicit completion/release operation. Its registry contains unfinished work, not every retained run or every signal ever created.
 - Adapt existing HTTP tracking to it: register an admitted request before dispatch and release it after handler work and response-body completion/cancellation. Keep outstanding operations owned until they actually settle, even if the caller has disconnected.
