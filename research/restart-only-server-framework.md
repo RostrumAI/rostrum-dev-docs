@@ -33,20 +33,6 @@ Workflow business logic and rule-set selection live in `services/workflows/`. `F
 
 The API sketches below use the amended vocabulary. Verification of this follow-up is recorded separately by its implementation work.
 
-## Delivered surface
-
-`@rostrum/server` now owns one implementation of each contract this document proposed, and both backend services are built on it:
-
-- `boot(root, definition, open)` loads and validates configuration once, initializes logging, asks the service to open its resources and application, binds Bun, and owns bounded shutdown. `ServiceRuntimeConfig`, `OpenedService`, and the exactly-once close live beside it.
-- `defineConfig` and `loadConfig` declare an application's settings, sources, and defaults, and return one frozen configuration.
-- `createServiceBuilder` declares a service as one value: binding, request schemas, OpenAPI metadata, documented responses, contributed components, and `handler(request, response, context)`.
-- `createServerApp` returns a branded application that installs the mandatory request-id and access-log middleware before any route, and `createServiceRegistrar` rejects conflicting declarations at startup.
-- `serveOpenApi` serves the contract translated from the same registered services.
-- Strict JSON body and path-parameter validation run before every handler, and the application owns the error envelope each failure answers with.
-- Both applications keep one static `routes.ts`, and the filesystem scan, dynamic import, service accessors, and loader are gone.
-
-Verified by the repository's own gates and by a real two-process run against a disposable database: daemon authentication and readiness, aggregated Control API readiness over HTTP, a full authoring round trip, the documented 400/404/405 shapes, and a bounded zero exit on SIGTERM.
-
 ## Decision
 
 Application configuration is immutable for one process lifetime. Configuration, environment, token-file, and direct-TLS changes take effect only after process restart. Remove application-managed SIGHUP reload, candidate comparison, and resource replacement.
