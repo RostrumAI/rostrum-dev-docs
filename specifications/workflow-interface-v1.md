@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Accepted |
 | Machine-readable schema source | [`packages/workflow/src/schema.ts`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/src/schema.ts) |
-| Last updated | 2026-08-28 |
+| Last updated | 2026-09-17 |
 
 ## What this specification defines
 
@@ -26,7 +26,7 @@ The JSON Schema 2020-12 document emitted from [`packages/workflow/src/schema.ts`
 
 This specification describes the accepted document and publication rules, not a completed execution engine. [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) establishes independent runs, progress, data flow, and final results. [M2 Epic 3](../epics/m2/3-execute-conditional-workflows.md) adds conditional selection and resolves its comparison and completion rules. [M2 Epic 4](../epics/m2/4-execute-parallel-paths-and-joins.md) adds structured parallel paths and joins. [M2 Epic 5](../epics/m2/5-execute-bounded-loops.md) adds ordered iterations with configurable error handling. Their implementation plans define the detailed contracts and executable examples; each workstream keeps this specification, validation, and execution consistent.
 
-Those Epics own resolving the execution semantics and any change to the rules below. Requiring explicit conditional destinations or restricting parallel graphs would reject documents accepted today, so the owning Epic must apply the [versioning rules](#breaking-and-additive-changes) before introducing such restrictions.
+Those Epics own resolving the execution semantics and any change to the rules below. Requiring explicit conditional destinations or restricting parallel graphs would reject documents accepted today, so the owning Epic must apply the [versioning rules](#breaking-and-additive-changes) before introducing such restrictions. [Execution preparation](#execution-preparation) states the rules a release applies to a publication before it starts a run.
 
 ## Document structure
 
@@ -186,6 +186,21 @@ Loop rules:
 6. `loop` is mutually exclusive with `conditional`.
 7. Body terminal steps' outputs are collected into an array and exposed as the loop step's output under the reserved output name `results`. A reference to `step.<loopStepId>.results` resolves to the collected array without a declaration in the loop step's `outputs`; declaring `results` in `outputs` is optional and documents the element shape.
 8. The loop step's own handler runs before iteration begins, so `collection` may reference the loop step's own outputs in addition to any workflow input or upstream step output.
+
+## Execution preparation
+
+Publishing decides whether a document is valid. Execution decides whether a release can run the publication, and a document that publishes can still declare behavior a particular release does not execute. Refusing an invocation never changes which documents are publishable, and an executor never narrows a document to the part it supports.
+
+Before a run exists, preparation reads the selected publication and applies these rules to it:
+
+- **Presence is explicit.** Every declared workflow input must be supplied by the invocation, and an input the workflow does not declare is rejected. An optional operation input may be omitted, but an explicit value — including `null` — must satisfy its schema. A schema `default` never supplies a missing value.
+- **Only whole bindings are references.** The `{ "ref": "..." }` form is interpreted where a binding value is expected; the same object nested inside a larger literal is data. Names are flat keys: a name containing a dot selects that one member rather than a path through nested objects, and an explicit reference must resolve before the step that uses it runs.
+- **References are not recursive.** A declared value schema that references itself, directly or through a chain, is refused, because evaluating it has no bound on schema recursion.
+- **`format` is an annotation.** Declaring a format never rejects a value that satisfies the other keywords. The annotation stays in the stored document and inside literal values such as `const` and `enum`.
+- **The result step produces the run's output.** Its resolved input object is the final output exactly, including an empty object when it binds no inputs. Reaching the result step without resolving its bindings is a failure, not a finished run.
+- **Failures are located and distinct.** A refusal names the step or input it applies to with a JSON Pointer and a stable code, and keeps its cause distinct: a missing publication, corrupt stored content, unsupported execution, and invalid inputs are separate outcomes.
+
+Rules that a later Epic owns — conditional selection, parallel paths, loops, retries, and durable progress — are specified by the Epic that introduces them.
 
 ## Format versioning and evolution
 

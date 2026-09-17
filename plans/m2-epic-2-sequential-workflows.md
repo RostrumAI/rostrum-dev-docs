@@ -55,7 +55,7 @@ Review API/data contracts and presence rules with the API/specification owners, 
 
 ## Progress
 
-- [ ] Agree invocation, task-work, observation, configuration, and lifecycle contracts.
+- [x] Agree invocation, task-work, and observation contracts (checkpoint 1). Configuration and lifecycle contracts remain with checkpoints 3 and 4.
 - [ ] Build and demonstrate daemon-local execution directly.
 - [ ] Connect invocation and inspection through both services.
 - [ ] Verify independence, work tracking, shutdown, and operator setup.
@@ -69,6 +69,8 @@ The implementing engineer owns these steps. Each checkpoint must leave the repos
 - Add shared execution data contracts, the daemon-local task executor interface, and preparation that validates capabilities and compiles value schemas without executing work.
 - Clarify presence/reference/result rules in the workflow specification; preserve existing publication validation and digest vectors.
 - **Done when:** supported publications produce a prepared graph; unsupported behavior and invalid inputs reject before any run exists. Contract changes have API/specification review.
+- **Implementation PR:** [#64](https://github.com/RostrumAI/rostrum/pull/64), branch `feat/m2-sequential-checkpoint-1`. Shared contracts are in `packages/workflow/src/execution.ts` (`@rostrum/workflow/execution`); the task boundary and preparation are in `apis/daemon/src/services/runs/execution/`, with `README.md` beside them.
+- **Verification:** `bun run check` clean; `bun run lint` clean apart from pre-existing warnings in untouched files; `bun test` 496 pass, 0 fail, including 30 new preparation, schema, and JSON-guard tests. A direct preparation run (no HTTP, no Postgres) resolved the worked example's bindings and accepted its frozen inputs, refused a string amount, a missing input, and an undeclared input as `invalid_inputs` with distinct codes and locations, refused an unknown operation as `unsupported_execution`, and refused unparseable stored content as `corrupt_publication`. The specification's [execution preparation](../specifications/workflow-interface-v1.md#execution-preparation) section states the clarified rules; publication validation and its digest vectors are unchanged.
 
 ### 2. Build the local execution cycle
 
@@ -323,13 +325,23 @@ Run the example directly and through actual service entry points. Use test-only 
 - Publishable does not yet mean executable: validation permits missing task config, unknown operation names, and malformed value-schema fragments. Execution preparation must reject these without changing publication validity.
 - TypeBox compilation can accept malformed schemas and asserts formats by default. Schema validation and annotation handling are separate from successful compilation.
 - Existing shutdown already distinguishes request cancellation from tracked completion. Extending that mechanism avoids a competing shutdown system for runs.
+- TypeBox's `Static` degrades to `never` under this repository's compiler when a schema is built from a computed array (`Type.Union(codes.map(...))`). The failure-code and rejection-reason sets stay single-sourced and compile correctly as a JSON Schema `enum`.
+- The installed TypeBox compiler enforces some keywords outside 2020-12 (`dependencies`, `dependentRequired`) and ignores unknown ones, so an unrecognized assertion keyword would silently weaken validation. Fragments are therefore validated against offline 2020-12 meta-schemas before compilation, and the capabilities this release cannot vouch for are refused.
+- A plain self-`$ref` exhausts the compiler stack while compiling, so recursive fragments are refused rather than compiled.
+- TypeBox's `Errors()` returns a bounded batch of failing items per call: a document with 40 malformed steps produced 16 shape findings. The refusal list is capped by preparation itself, not by the library.
+- Reading a canonical document through a strict parse and then narrowing it to a typed document keeps the untyped-to-typed transition at one reviewed place; preparation re-runs the shared validator so a daemon never executes content that this release's rules would not accept.
 
 ## Decision log
 
 - 2026-09-16: retain the delivered controller/service split and restart-only framework.
 - 2026-09-16 review revision: propose daemon-local execution, a per-task work/result boundary, graph-preserving preparation, configurable workload limits, and generalized work tracking. Keep invocation idempotency with the governing M3 durability Epic.
+- 2026-09-17 checkpoint 1: shared execution contracts live in `@rostrum/workflow/execution`; the prepared graph is a serializable projection of the validated document (steps keyed by id with successors, dependencies, bindings, and compiled checks) rather than a retained `WorkflowGraph` instance, so one prepared definition can be shared without mutable engine state.
+- 2026-09-17 checkpoint 1: a task step's `config` is exactly the supported operation declaration. Preparation refuses an unknown operation, an undeclared configuration member, configuration on a `result` step, more than one distinct successor, a `loop`, or a `conditional`, without changing which documents publish.
+- 2026-09-17 checkpoint 1: document-level problems refuse as `unsupported_execution` and input problems as `invalid_inputs`; a refusal carries at most 32 sanitized failures, each located by JSON Pointer at the offending member, including missing and undeclared members.
+- 2026-09-17 checkpoint 1: declared value fragments are validated against offline 2020-12 resources before TypeBox compilation. `format` is an annotation stripped from the compiled copy's schema positions, schema defaults are never applied, and `$id`, dynamic-scope keywords, external or unresolved references, and recursive references refuse as unsupported.
+- 2026-09-17 checkpoint 1 open item for checkpoint 3: both services must keep the single application error envelope. How a domain `RunInvocationRejection` and its failures appear in that envelope is checkpoint 3's contract decision.
 - Record approvals or changed contracts here before dependent implementation; review comments and proposed designs are not implementation evidence.
 
 ## Outcome
 
-No execution implementation has shipped. Complete the checkpoints, record implementation PRs and verification results, then move lasting contracts into the specification/code and retire this plan.
+Checkpoint 1 landed the shared execution contracts, the task boundary, and preparation that refuses unsupported publications and invalid inputs before a run exists (implementation PR [#64](https://github.com/RostrumAI/rostrum/pull/64)). Execution itself has not shipped: complete checkpoints 2 through 4, record their implementation PRs and verification results, then move lasting contracts into the specification/code and retire this plan.
