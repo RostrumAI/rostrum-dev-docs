@@ -38,7 +38,7 @@ Captured errors belong to iteration results, not the run's unhandled-failure lis
 
 The [workflow specification](../../specifications/workflow-interface-v1.md) defines bounded collections but does not yet define loop error-policy configuration or success/error result entries. This Epic settles those rules and keeps authoring validation, execution, and inspection consistent under the governing versioning rules.
 
-The implementation plan supplies policy field names and values, exact result schemas, error-code eligibility, handler choices, executable workflows, and verification procedures. Epic 6 consolidates those examples into the shared catalog rather than requiring a separate catalog here.
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint explains how iteration execution and error handling fit the existing engine. The technical design supplies policy field names and values, exact result schemas, error-code eligibility, handler choices, executable workflows, and verification procedures. Epic 6 consolidates those examples into the shared catalog rather than requiring a separate catalog here.
 
 ## Non-goals
 

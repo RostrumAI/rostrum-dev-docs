@@ -35,13 +35,15 @@ Recovery can execute an interrupted handler more than once. M3 handlers remain d
 
 ## Decisions and implementation ownership
 
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint compares persistence approaches and establishes storage, execution, and API responsibilities. The technical design resolves the record and recovery mechanics within that approach.
+
 This Epic owns choosing and implementing run persistence. Compare the existing Postgres database with any proposed additional store, such as Redis, against durable acceptance, checkpoint consistency, recovery, concurrent runs, and inspection during daemon downtime. Select the smallest self-hostable design that meets those requirements; neither an extra service nor a replaceable multi-backend framework is required. The existing shared Postgres publication store remains a dependency, not a decision about where every run record must live.
 
 Resolve checkpoint boundaries, interrupted-attempt treatment, invocation-key scope and lifetime, response replay, and behavior when a commit's result is uncertain. Define the supported restart and storage-failure model, storage setup and migration, and service read/write responsibilities. The daemon alone advances execution; the Control API reads committed execution records. Any required change to M2's private-HTTP coordination boundary must be explicit rather than introduced through implicit database polling.
 
 This Epic owns the storage and recovery design; no earlier design is assumed. Resolve those choices against the delivered M2 implementation. Record durable rules in the appropriate specification or decision and keep storage, runtime, and API behavior consistent.
 
-This Epic records the execution events needed to explain its checkpoints and recovery. [Epic 5](5-inspect-run-timelines.md) adds the caller's timeline and cursor contract. [Epic 2](2-retry-bounded-failures.md) through [Epic 4](4-wait-for-human-decisions.md) extend checkpoints and recovery for retries, controls, and decisions; each owns verification of its additions. Detailed record shapes, algorithms, interruption controls, and executable scenarios belong in implementation plans.
+This Epic records the execution events needed to explain its checkpoints and recovery. [Epic 5](5-inspect-run-timelines.md) adds the caller's timeline and cursor contract. [Epic 2](2-retry-bounded-failures.md) through [Epic 4](4-wait-for-human-decisions.md) extend checkpoints and recovery for retries, controls, and decisions; each owns verification of its additions. Detailed record shapes, algorithms, interruption controls, and executable scenarios belong in technical designs.
 
 ## Non-goals
 

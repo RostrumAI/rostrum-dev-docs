@@ -1,129 +1,139 @@
 # Epic delivery methodology
 
-Status: Approved
+Status: Current standard.
 
-This document defines how Rostrum turns product goals into technical work that an agent can plan, implement, and verify without creating a large planning hierarchy.
+This document defines how we turn product requirements into implemented, verified behavior. It governs new work and work resumed from an earlier design.
 
-## Method
+## Delivery flow
 
-Rostrum uses four levels:
+Product strategy establishes the problem, audience, and product boundaries. Roadmap milestones order the capabilities we need. Within a milestone, work follows this sequence:
 
 ```text
-Product strategy
+Product requirement (Epic)
     ↓
-Product roadmap milestone
+High-level implementation blueprint
     ↓
-Technical Epics
+Technical design
     ↓
-One or more implementation plans per active Epic
+Code and verification
 ```
 
-Product strategy defines the problem, audience, product boundaries, and architectural principles. The roadmap orders observable product goals.
+Each stage answers a different question. Keeping them separate lets us review what we need to build before deciding its exact implementation.
 
-A technical Epic defines one coherent product capability needed to reach a roadmap milestone. It explains the intended behavior, scope, constraints, non-goals, and observable acceptance criteria. Include technical detail when it explains what a user can do or inspect, or a boundary the implementation must preserve. An Epic is not a detailed design or implementation plan.
-
-Each implementation plan covers one coherent workstream within an Epic. Its owner records the current repository state, implementation sequence, checkpoints, decisions, progress, verification, and recovery information. For the plan format, see [Epic implementation plan format](epic-implementation-plan-format.md).
-
-## Epic size
-
-An Epic is the right size when:
-
-- One owner can maintain each implementation plan.
-- It has one coherent technical outcome.
-- Its acceptance can be demonstrated independently.
-- Each plan needs only a small number of checkpoints.
-- Another agent can resume from the plan without loading the entire roadmap.
-
-An Epic may have several plans when separate owners can work on distinct parts of the same technical outcome. Each plan must have a clear scope and owner, and plans must link any dependencies between them. Split the Epic when its outcomes can be accepted independently or no longer form one coherent result.
-
-## Writing an Epic
-
-Write for an engineer who knows the product but has not designed the subsystem. Lead with the capability and the behavior users should expect. Explain unfamiliar terms, identify who or what each rule applies to, and distinguish limits on a deployment from limits on individual uses of it.
-
-Keep useful technical detail without designing the implementation in the Epic. Execution states belong here when they help a caller understand progress or inspect an outcome, even if the engine also uses them internally. Handler interfaces, schema fields, algorithms, operation catalogs, and exhaustive error cases belong in the specification or implementation plan.
-
-Use a short product scenario when it clarifies a requirement. Do not require a sample implementation or executable test procedure in every Epic. The implementation plan selects the concrete operations and workflows, supplies their inputs and expected results, and explains how to verify them.
-
-Use terminology from the current governing decisions, and distinguish agreed direction from implemented behavior and unresolved proposals. Link detailed rules rather than repeating them. Acceptance criteria state observable outcomes; review ownership and verification procedures belong with the work that performs them.
-
-The Epic introducing a behavior owns focused verification of that behavior. A dedicated testing Epic may consolidate examples and test infrastructure without making earlier Epics depend on that later work.
-
-## Plans and checkpoints
-
-An implementation plan can span several agent sessions and pull requests. Checkpoints are sections inside the plan, not separate documents or tracker objects.
-
-Several plans can be active under the same Epic. Each checkpoint belongs to exactly one plan, and the plans together must cover the Epic acceptance criteria without duplicating work.
-
-Each checkpoint states:
-
-- The behavior or repository state it produces.
-- The work needed to reach it.
-- The commands and scenarios that prove it.
-- Any decision that requires human approval.
-- The information another contributor needs to resume.
-
-The plan records temporary research, implementation decisions, discoveries, and concise evidence. Create a separate specification, decision record, or research document only when its content must remain useful across several Epics.
-
-## Reviews and ownership
-
-The plan identifies which work requires senior review. Public contracts, state transitions, persistence, concurrency, compatibility, and security boundaries require an appropriately skilled reviewer.
-
-A junior developer can own a bounded Epic or checkpoint when the contract, reference pattern, permitted files, acceptance scenario, and escalation conditions are explicit. They must escalate work that changes a shared interface or introduces a decision outside the approved plan.
-
-An independent agent reviews the implementation against the Epic and plan before human review. Human review then concentrates on decisions and risks that require judgment.
-
-## Local workflow execution example
-
-The current "Local workflow execution" Epic is too broad to be one coherent technical Epic. It becomes roadmap milestone M2:
-
-> A caller can invoke an exact workflow publication through the Control API, disconnect, and later retrieve progress, output, or failures. One daemon supports independent concurrent runs and every M2 control-flow construct.
-
-M2 is delivered through these technical Epics:
-
-| Epic | Technical outcome | Independent acceptance |
+| Stage | Responsibility | Location and guidance |
 | --- | --- | --- |
-| M2 Epic 1: Establish the daemon network boundary | Run independently configured Control API and daemon services over private authenticated HTTP, with both using the same Postgres database through `packages/database`; move backend services to `apis/` | Focused service checks prove authenticated requests, readiness, errors, and independent shutdown; M2 Epic 6 owns the automated separate-network environment |
-| M2 Epic 2: Execute sequential workflows | Invoke a selected publication, follow its sequence, and inspect each run's progress and outcome | Accepted runs continue after client disconnect and remain independent, including concurrent invocations of the same publication |
-| M2 Epic 3: Execute conditional workflows | Select one path from declared conditions and show which work was selected or excluded | A pricing scenario produces the correct result on each path; invalid conditions remain distinguishable from false conditions |
-| M2 Epic 4: Execute parallel paths and joins | Combine independent work within a run while sharing worker capacity across runs | Joins wait for successful paths, results do not depend on completion order, and busy runs do not starve other eligible runs |
-| M2 Epic 5: Execute bounded loops | Process items in order with author-selected iteration error handling | Fail-fast prevents later iterations; permitted error capture preserves the failed item's position and allows later items to run |
-| M2 Epic 6: Complete M2 conformance | Demonstrate consistent M2 behavior across execution layers and real services | One command proves the combined constructs, shared storage and secure network access, concurrent runs, client disconnect, and cleanup |
+| Epic | Define the capability, user-visible behavior, constraints, and observable acceptance criteria. | [epics/](epics/README.md); [Epic format](#epic-format) below. |
+| High-level implementation blueprint | Explain what we need to build technically, why that approach fits, and how the major responsibilities interact. | [blueprints/](blueprints/README.md); [high-level implementation guide](high-level-implementation-guide.md). |
+| Technical design | Explain how the blueprint will work in the actual repository, including files, contracts, interactions, failures, implementation order, and verification. | [designs/](designs/README.md); [technical design guide](technical-design-guide.md). |
+| Code and verification | Implement the agreed behavior and demonstrate that it satisfies the requirements. | Source, tests, fixtures, and implementation pull requests in the code repository. |
 
-The Epics introduce behavior in dependency order. M2 Epic 2 establishes run identity, progress, data flow, and results. M2 Epics 3 through 5 extend execution with each control-flow construct while keeping the specification, validation, and runtime consistent. Their implementation plans supply detailed contracts and executable examples. M2 Epic 6 consolidates those examples and verifies the whole system rather than defining a different execution model.
+The blueprint may choose an architectural approach; it is not a less specific Epic. The technical design must explain how the parts work together, not merely list files or expand the blueprint into code snippets. Both use the [shared writing style and self-review procedure](writing-style.md).
 
-### Current work mapping
+Specifications define durable contracts, and decision records preserve choices that affect more than one workstream. Link them from the relevant stage rather than copying them into every document. A blueprint or design cannot silently override a governing requirement, specification, or decision.
 
-| Current work | Revised location |
+## Scope and relationships
+
+An Epic delivers one coherent product capability with independently observable acceptance. Normally, it has one blueprint. Split its blueprint into separate workstreams only when each has a clear owner and nonoverlapping responsibilities; state their dependencies and show how they cover the whole Epic. Split the Epic instead if the proposed capabilities can be accepted independently.
+
+A blueprint can have several technical designs when the work has separately implementable slices. Each design links to exactly one parent blueprint and to its Epic. The blueprint links back to its designs and identifies which requirements they cover. Cross-workstream dependencies point to the responsible document rather than duplicating its design.
+
+Use descriptive workstream names under `blueprints/` and `designs/`. A design slice adds a descriptive suffix to its workstream name. Milestone Epics remain under `epics/m2/`, `epics/m3/`, and later milestone directories. Add documents to the appropriate directory index and link them from their parent when they are created; do not create empty future designs to complete a list.
+
+New capabilities and architectural changes use all four stages. A correction to already-designed behavior reuses and updates the existing documents instead of creating duplicate planning artifacts. Writing, research, and review-only work use the relevant writing guidance; they do not need a fictional implementation design.
+
+## Epic format
+
+Write for an engineer who knows the product but has not designed the subsystem. State what the capability does, including meaningful failure behavior, without choosing files, interfaces, algorithms, or a test harness.
+
+Each Epic includes the following information. Use headings that fit the subject; completeness matters more than identical wording.
+
+| Section | What the reader needs |
+| --- | --- |
+| Document context | Roadmap milestone, owner, governing specifications or decisions, and whether the proposed behavior is agreed or still under discussion. Keep delivery progress distinct from agreement on the requirement. |
+| Outcome | The capability this Epic adds and what a caller, author, or operator can do or observe afterward. |
+| Scope and behavior | What uses are supported, important states and interactions visible to the user, and the required outcomes when something fails. |
+| Constraints and non-goals | Boundaries the implementation must preserve, what remains allowed within them, and work explicitly owned elsewhere. |
+| Dependencies and decisions | Capabilities this work needs, the owner of each dependency, and unresolved choices that affect the requirement. |
+| Acceptance criteria | Observable outcomes that distinguish successful delivery from partial or incorrect behavior. |
+| Delivery documents | Links to the blueprint or blueprints and the scope each covers. Do not present unwritten or unreviewed designs as accepted work. |
+
+Technical detail belongs in an Epic when it explains a user-visible distinction or a governing constraint. For example, sequential execution within one run is different from allowing several independent runs at once. Exact scheduler interfaces and controlled-concurrency test fixtures belong in the technical design.
+
+A short scenario can clarify a requirement. The design supplies the concrete workflow, inputs, expected results, and commands that demonstrate it. The Epic introducing a behavior owns its focused verification; a later conformance Epic may combine the evidence without becoming a prerequisite for proving the original behavior.
+
+### Epic-specific self-review
+
+Use these checks with the [common self-review procedure](writing-style.md#self-review-procedure). Each applies to every Epic; where child documents do not exist yet, assess the identified scope and owner rather than requiring empty files.
+
+| Criterion | Fails when | Correction and evidence needed |
+| --- | --- | --- |
+| Coherent capability | The reader can identify only a list of internal changes, or the Epic mixes independently acceptable capabilities. | State the product outcome or split the scope. Cite the outcome and the user behavior that demonstrates it. |
+| Required behavior and limits | A supported use or meaningful failure has no observable outcome, or a limit unintentionally applies to other scopes. | Name the affected caller or use, required result, and boundary. Cite the behavior and its governing requirement. |
+| Independent acceptance | Criteria say only that code, tests, or approval must exist, or defer all proof to a later conformance Epic. | State outcomes that could reveal an incorrect implementation and identify ownership of focused verification. Cite the acceptance criteria. |
+| Dependencies and authority | A required capability or open decision has no owner, or a proposal is presented as agreed behavior. | Link the responsible source and name the decision, owner, and dependent work. Cite the dependency and status. |
+| Blueprint handoff | The Epic prescribes file-level implementation instead of requirements, or its intended scope has no blueprint owner. | Move mechanisms to the appropriate design layer and identify the blueprint scope and owner. Cite the delivery-document section and any existing child links. |
+
+## Review and handoff
+
+Authors self-review the document before asking another person to rely on it. Apply the [common checks](writing-style.md) and the checks for its document level. Cite the sections that satisfy each applicable check; revise unclear or incomplete passages rather than marking them complete because a heading exists.
+
+Each handoff states whether the document is ready, needs revision, or is blocked. Identify unresolved decisions and the work they prevent. A self-review result is not approval of an architectural choice and is not evidence that code works.
+
+| Handoff | What must be established |
+| --- | --- |
+| Epic to blueprint | The intended capability, scope, acceptance criteria, and governing constraints are clear. Requirement decisions affecting the proposed work are agreed by the responsible owner. |
+| Blueprint to technical design | Responsibilities, major interactions, approach, scope boundaries, and requirement coverage are explained and reviewed. Consequential architecture choices are agreed; tentative options are not treated as requirements. |
+| Technical design to code | The design is grounded in the repository, covers affected contracts and callers, explains ownership and end-to-end behavior, and supplies meaningful implementation checkpoints and verification. Decisions required by the next checkpoint are resolved and the required reviews are complete. |
+| Code to acceptance | The implementation has been exercised, the expected outcomes were observed, required reviews are complete, and the Epic's acceptance criteria are satisfied. Partial progress is not Epic completion. |
+
+Public contracts, state transitions, persistence, concurrency, compatibility, and security boundaries need an appropriately skilled reviewer. Name the reviewer or responsible role in the design. Human approval is required where the owner or governing decision calls for it; never manufacture that approval from an author's self-review or an earlier plan's status.
+
+Work on an independent design slice can proceed while an unrelated choice remains open. State the boundary explicitly. Do not start a checkpoint whose behavior depends on that unresolved choice.
+
+If implementation reveals that the design cannot satisfy the blueprint, update and review the affected upstream decision before proceeding. A changed product outcome also requires updating the Epic. Keep the current direction clear instead of appending a contradictory alternative and leaving the implementer to choose.
+
+## Checkpoints and implementation records
+
+Execution tracking belongs in the technical design, not in a fourth planning document. A design can span several sessions and pull requests. Each checkpoint has one owner, leaves a runnable result, and states the work, observable outcome, verification, required review, and recovery information. The [technical design guide](technical-design-guide.md) defines the format.
+
+Record actual progress, discoveries, decisions, and concise evidence beside the checkpoint they affect. Preserve the difference between a planned check and an observed result. Retain useful references to raw output or implementation pull requests rather than copying long logs into the design.
+
+An independent implementation review checks the code against the Epic, blueprint, design, and governing contracts before human acceptance. Review is not a substitute for exercising the changed behavior. The implementing work owns its fixtures and focused checks even if another workstream owns shared conformance infrastructure.
+
+## Document lifecycle
+
+Create a blueprint when an Epic's scope is ready for technical planning. Create a design when its blueprint is sufficiently settled and the relevant repository state can be inspected. Do not prepopulate later milestones with speculative designs.
+
+While work is active, maintain one current document for each scope. Keep its parent and child links, status, unresolved decisions, and coverage accurate. Distinguish the target behavior from what has actually shipped.
+
+After the work is accepted, move lasting requirements, contracts, and decisions into their durable homes. Retire delivery-only blueprints and designs when no active work depends on them; update links before deleting them. Git history retains their execution record. Keep a still-needed design current rather than maintaining both an active copy and an archive copy.
+
+## Resuming work from prior combined plans
+
+The documents currently under `plans/` combine architectural direction, detailed design, and execution records. They are prior records, not an alternative format for new work. Their notices identify this boundary, and the [documentation index](README.md#prior-combined-plan-records) lists them separately.
+
+Before resuming their implementation:
+
+1. Read the Epic, current specifications and decisions, and the prior plan's decisions, evidence, and unresolved review findings.
+2. Establish the relevant high-level blueprint under `blueprints/`. Separate agreed direction from open proposals and link the prior record where it supplies useful context.
+3. Produce the technical design under `designs/` against the actual repository. Carry forward applicable constraints and unresolved findings, and re-evaluate earlier assumptions rather than declaring them current by copying them.
+4. Complete the review and handoff requirements above before dependent implementation begins. Link the new documents from their parents and indices.
+
+A renamed combined plan is not automatically both a reviewed blueprint and a technical design. Prior evidence remains evidence of the work it actually exercised; this format change neither accepts unfinished work nor changes product behavior.
+
+## Historical task mapping
+
+The earlier decomposition of local workflow execution used the mapping below. It remains a reference for older issues; it does not define a competing delivery process.
+
+| Earlier work | Capability owner |
 | --- | --- |
 | E2-S2 and E2-05 | M2 Epic 1 |
 | E2-S1, E2-03, E2-04, and the run-contract and sequential portions of E2-06, E2-07, E2-10, E2-11, and E2-12 | M2 Epic 2 |
 | Conditional portions of E2-07, E2-11, and E2-12 | M2 Epic 3 |
 | Parallel implementation portions of E2-08 | M2 Epic 4 |
 | Loop implementation portions of E2-09 | M2 Epic 5 |
-| Conformance and real-process demonstration portions of E2-08, E2-09, E2-11, and E2-12 | M2 Epic 6 |
+| Conformance and real-process demonstration portions of E2-08, E2-11, E2-12 | M2 Epic 6 |
 | E2-01 | M2 Epic 2 prerequisite or maintenance pull request |
-| E2-02 | Closed when this methodology and migration are approved |
+| E2-02 | Earlier methodology and documentation migration approval |
 
-## Milestone 3: Durable runs and human control
-
-M3 is delivered through seven technical Epics:
-
-| Epic | Technical outcome | Independent acceptance |
-| --- | --- | --- |
-| [M3 Epic 1: Recover durable runs](epics/m3/1-recover-durable-runs.md) | Persist accepted runs and recover interrupted M2 execution | A run survives service restart, preserves committed work, and remains inspectable while the daemon is unavailable |
-| [M3 Epic 2: Retry bounded failures](epics/m3/2-retry-bounded-failures.md) | Retry explicitly eligible failures within durable attempt limits | A retry succeeds or exhausts with every attempt visible and no unbounded repeat |
-| [M3 Epic 3: Pause, resume, and cancel runs](epics/m3/3-pause-resume-and-cancel-runs.md) | Apply durable operator commands at recoverable execution boundaries | A caller can pause, resume, or cancel one run and distinguish request acceptance from applied execution |
-| [M3 Epic 4: Wait for human decisions](epics/m3/4-wait-for-human-decisions.md) | Wait durably for one validated general decision and continue its selected path | A decision survives restart, accepts one response, and exposes its continuation and response |
-| [M3 Epic 5: Inspect run timelines](epics/m3/5-inspect-run-timelines.md) | Expose committed per-run events through cursor-based retrieval | A reconnecting caller can read complete ordered history without a live daemon |
-| [M3 Epic 6: Retrieve run artifacts](epics/m3/6-retrieve-run-artifacts.md) | Store and retrieve bounded immutable evidence with integrity metadata | A caller retrieves an artifact independently and verifies its producer, size, and digest |
-| [M3 Epic 7: Complete M3 conformance](epics/m3/7-complete-m3-conformance.md) | Demonstrate the combined durable lifecycle through real services | One isolated command proves restart, retry, controls, decisions, timelines, artifacts, and M2 compatibility |
-
-M3 Epic 1 establishes the durable source of truth and recovery rules. M3 Epics 2 through 6 add independent lifecycle capabilities while extending the same checkpoint and observation contracts. M3 Epic 7 composes them into one real-service demonstration. The Epics require implementation plans to resolve storage, schemas, interruption behavior, and test controls without prescribing a database, queue, artifact backend, or live subscription system in advance.
-
-M3 is separate from later governance. A decision records a response and available caller identity, but does not assign approvers or send notifications. Operator controls affect one run, while human decisions are workflow steps.
-
-## Other roadmap work
-
-Milestones 4 through 13 remain roadmap entries. Do not create speculative Epic files or plans for them until their dependencies and boundaries are clear.
-
-For the repository cutover, see [Development documentation migration](development-documentation-migration.md).
+The [M2 overview](epics/m2/overview.md) and [M3 overview](epics/m3/overview.md) own the current milestone breakdown. The [documentation migration record](development-documentation-migration.md) records the move into the independent documentation repository.

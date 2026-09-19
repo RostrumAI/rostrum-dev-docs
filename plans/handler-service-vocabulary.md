@@ -1,8 +1,12 @@
 # Rename the service framework vocabulary and split the application tiers
 
+> **Prior combined-plan record.** This document retains the proposed rename, historical owner approvals, unresolved decisions, and recorded progress; it is not a current blueprint or technical design. Its baseline and implementation instructions describe the work at the time recorded and cannot by themselves authorize new or resumed implementation.
+>
+> Before new or resumed work, establish and review the relevant blueprint and technical design against the actual repository state under the [delivery methodology](../epic-delivery-methodology.md), with an explicit relationship to the governing Epic. Preserve applicable decisions, approval limits, and any recorded evidence without treating the proposed status or historical sign-off as current completion. Use the current [high-level implementation guide](../high-level-implementation-guide.md) and [technical design guide](../technical-design-guide.md), keeping this record as historical context.
+
 Epic: none. This work amends the framework contract delivered under [M2 Epic 1: Establish the daemon network boundary](../epics/m2/1-establish-daemon-network-boundary.md). The governing design record is [Restart-only server framework](../research/restart-only-server-framework.md).
 
-Status: Proposed. The tier vocabulary, the `handlers/` folder name, and the intent to apply the rename across all code and documents are owner-approved (2026-09-15). The decisions marked below still need owner sign-off before dependent work begins.
+Recorded status: Proposed. The tier vocabulary, the `handlers/` folder name, and the intent to apply the rename across all code and documents are owner-approved (2026-09-15). The decisions marked below still need owner sign-off before dependent work begins.
 Owner: Implementing agent.
 Last researched: 2026-09-15.
 

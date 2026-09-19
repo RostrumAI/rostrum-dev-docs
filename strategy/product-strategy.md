@@ -318,7 +318,9 @@ This order keeps collaboration and hosted scale from delaying the first useful, 
 
 ## 8. What technical Epics must resolve
 
-This strategy does not specify detailed screens, endpoint schemas, database tables, node-by-node behavior, model-provider prompts, the final state-storage implementation, specific Docker or microVM implementations, pricing, or implementation plans. The high-level direction for workflow JSON, explicit inputs, revisioned Git collaboration, per-node simulation, the Model Provider Layer, container-defined scripts, and visual authoring is decided. Technical Epics describe the product capabilities, governing constraints, and observable acceptance criteria. Specifications and implementation plans provide the detailed contracts and designs.
+This strategy does not specify detailed screens, endpoint schemas, database tables, node-by-node behavior, model-provider prompts, the final state-storage implementation, specific Docker or microVM implementations, pricing, or implementation mechanics. The high-level direction for workflow JSON, explicit inputs, revisioned Git collaboration, per-node simulation, the Model Provider Layer, container-defined scripts, and visual authoring is decided. Technical Epics describe the product capabilities, governing constraints, and observable acceptance criteria.
+
+The [delivery methodology](../epic-delivery-methodology.md) takes each Epic through a high-level implementation blueprint, then technical design, code, and verification. The blueprint selects technical responsibilities, interactions, and approach; the technical design resolves detailed contracts, algorithms, file-level changes, and verification procedures. Specifications retain the governing contracts rather than becoming execution instructions.
 
 Each technical Epic defines:
 

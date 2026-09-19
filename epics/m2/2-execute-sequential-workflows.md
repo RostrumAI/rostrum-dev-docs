@@ -45,7 +45,7 @@ The active-work list, `currentSteps`, shows ready and running steps rather than 
 - Execute reached steps once, in the workflow's declared sequence. A dependent step cannot start until its required predecessors succeed.
 - Let authors supply step inputs from literals, workflow inputs, and earlier successful step outputs. Missing required values or invalid data prevent the affected step from running. An optional input may be omitted, but an explicit reference must resolve.
 - Make step outputs available to later work only after the entire output has passed validation. Failed, incomplete, or not-yet-executed work cannot supply data.
-- Define the supported deterministic task capabilities and their input, output, and failure requirements. A handler performs one step's work; the daemon controls sequencing and workflow completion. Selecting the initial operation set and specifying handler interfaces belongs in the implementation plan.
+- Define the supported deterministic task capabilities and their input, output, and failure requirements. A handler performs one step's work; the daemon controls sequencing and workflow completion. The blueprint establishes the task-execution responsibilities and approach; the technical design selects the initial operation set and specifies handler interfaces.
 - Complete a sequential workflow through an explicit result step. Its resolved input values form the caller's final output. Reaching that step without resolving its data is a failure, not success.
 - Report failures with an identifiable step, cause, and location. Invalid handler outputs must not become downstream input or a successful final result. Terminal outcomes remain immutable.
 
@@ -53,7 +53,7 @@ The active-work list, `currentSteps`, shows ready and running steps rather than 
 
 [Workflow format v1](../../specifications/workflow-interface-v1.md) defines the accepted workflow document. This Epic establishes the sequential behavior above and keeps the specification, validation, daemon, and APIs consistent. Changes that affect accepted documents must follow the governing versioning rules.
 
-Implementation plans select the deterministic operations, define data and error shapes, and provide executable workflows and verification procedures. Those details are not an operation catalog in this Epic. Epic 3 owns conditional completion; Epic 4 adds parallel scheduling and failure handling; Epic 6 consolidates reusable testing infrastructure without becoming a prerequisite for this Epic's focused checks.
+The [delivery methodology](../../epic-delivery-methodology.md) takes this Epic through a blueprint and technical design before implementation. The technical design defines the deterministic operations, data and error shapes, executable workflows, and verification procedures. Those details are not an operation catalog in this Epic. Epic 3 owns conditional completion; Epic 4 adds parallel scheduling and failure handling; Epic 6 consolidates reusable testing infrastructure without becoming a prerequisite for this Epic's focused checks.
 
 ## Non-goals
 

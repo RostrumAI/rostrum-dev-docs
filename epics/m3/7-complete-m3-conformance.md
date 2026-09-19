@@ -34,11 +34,13 @@ This Epic consolidates evidence. It does not define a second execution model or 
 
 ## Decisions and implementation ownership
 
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint selects the conformance approach and assigns responsibilities across capability checks and the real-service demonstration. The technical design specifies fixtures, process controls, and verification procedures.
+
 Define the fixture format, layer coverage, process controls, isolated database setup, synchronization mechanism, and command contract. Choose whether the full-service demonstration runs against a temporary Postgres database, a temporary schema with isolated credentials, or another supported local store based on Epic 1's storage decision. The test environment must prove real persistence and must not silently fall back to process-local state.
 
 Define which assertions belong to the workflow validator, runtime, daemon, durable store, Control API, and artifact boundary. Transport-specific status codes may differ where the public contract permits, but the accepted workflow, durable records, and observable execution outcome must agree. Add focused regression tests only where a plausible durable behavior could regress; do not duplicate every fixture across every layer.
 
-The capability Epics own their contracts and focused verification. This Epic owns their composition, real-process interruption, concurrency controls, and one end-to-end release gate. A tested operational guide may be part of the implementation plan, but a new product Epic, telemetry platform, or Cloud deployment is out of scope.
+The capability Epics own their contracts and focused verification. This Epic owns their composition, real-process interruption, concurrency controls, and one end-to-end release gate. The technical design may include delivery of a tested operational guide, but a new product Epic, telemetry platform, or Cloud deployment is out of scope.
 
 ## Non-goals
 

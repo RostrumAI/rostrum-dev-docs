@@ -1,8 +1,12 @@
 # Implement the daemon network boundary
 
+> **Prior combined-plan record.** This document retains the decisions, review requirements, approvals, and verification evidence recorded for this work; it is not a current blueprint or technical design. Its baseline, completion claims, and implementation instructions describe the work at the time recorded and cannot by themselves authorize new or resumed implementation.
+>
+> Before new or resumed work, establish and review the relevant blueprint and technical design against the actual repository state under the [delivery methodology](../epic-delivery-methodology.md). Carry forward applicable decisions and evidence with their original approval and verification limits; do not infer current readiness from completed checkpoints. Use the current [high-level implementation guide](../high-level-implementation-guide.md) and [technical design guide](../technical-design-guide.md), keeping this record as historical context.
+
 Epic: [M2 Epic 1: Establish the daemon network boundary](../epics/m2/1-establish-daemon-network-boundary.md)
 
-Status: Checkpoints 1–4 recorded complete; restart-only supersession applied 2026-09-15.
+Recorded status: Checkpoints 1–4 recorded complete; restart-only supersession applied 2026-09-15.
 Owner: Implementing agent. Review requirements and the autonomous directory-move exception are defined below.
 Last researched: 2026-09-11.
 
@@ -22,7 +26,7 @@ Deliver independently started and stopped Control API and daemon processes, with
 
 The first complete network path is the Control API's readiness request to the daemon. It proves the real transport without inventing a workflow command before [Epic 2](../epics/m2/2-execute-sequential-workflows.md) supplies execution. Backend services move to `apis/` without aliases under `apps/`.
 
-Governing context: [product strategy](../strategy/product-strategy.md#48-control-api-and-service-boundary), [roadmap](../strategy/product-roadmap.md#3-delivery-milestones), [M2 overview](../epics/m2/overview.md), [workflow specification](../specifications/workflow-interface-v1.md), [delivery methodology](../epic-delivery-methodology.md), and [plan format](../epic-implementation-plan-format.md). No other active plan or durable decision record was present during research.
+Recorded governing context: [product strategy](../strategy/product-strategy.md#48-control-api-and-service-boundary), [roadmap](../strategy/product-roadmap.md#3-delivery-milestones), [M2 overview](../epics/m2/overview.md), and [workflow specification](../specifications/workflow-interface-v1.md). No other active plan or durable decision record was present during research. The methodology and guides linked above govern current work; they do not describe the format used to author this record.
 
 ## Current repository state
 
