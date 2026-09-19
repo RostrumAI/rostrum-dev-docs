@@ -24,11 +24,13 @@ The timeline is a projection of committed execution records. It is not a second 
 
 ## Decisions and implementation ownership
 
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint selects the event-storage and retrieval approach and explains how it relates to checkpoint commits. The technical design resolves the event and pagination mechanics.
+
 Resolve the event taxonomy, immutable fields, per-run sequencing, transaction relationship to checkpoints, cursor encoding and invalidation behavior, page limits, and the retention boundary needed for local inspection. Decide whether events are stored in the same Postgres-backed run store or a separate local component only if that choice preserves atomicity and keeps the Control API's source of truth clear. Redis streams, a log broker, or a live subscription system are not requirements for this milestone.
 
 Define the behavior for unreadable event records, a malformed cursor, an event page whose storage disappears, and a partially committed artifact reference. Event retrieval must fail explicitly rather than reorder or invent history. Specify how sensitive invocation data and response payloads are represented; do not copy unrestricted source-system content into the timeline by default.
 
-[Epic 1](1-recover-durable-runs.md) owns checkpoint atomicity and storage selection. [Epic 2](2-retry-bounded-failures.md), [Epic 3](3-pause-resume-and-cancel-runs.md), and [Epic 4](4-wait-for-human-decisions.md) own the transitions whose events this Epic exposes. [Epic 6](6-retrieve-run-artifacts.md) owns artifact content integrity. Detailed event schemas, API pagination, and executable replay scenarios belong in implementation plans.
+[Epic 1](1-recover-durable-runs.md) owns checkpoint atomicity and storage selection. [Epic 2](2-retry-bounded-failures.md), [Epic 3](3-pause-resume-and-cancel-runs.md), and [Epic 4](4-wait-for-human-decisions.md) own the transitions whose events this Epic exposes. [Epic 6](6-retrieve-run-artifacts.md) owns artifact content integrity. Detailed event schemas, API pagination, and executable replay scenarios belong in technical designs.
 
 ## Non-goals
 

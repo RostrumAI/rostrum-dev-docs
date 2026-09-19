@@ -62,7 +62,7 @@ Rostrum defines and executes workflows. A caller selects a workflow and supplies
 
 ## 3. Delivery milestones
 
-The roadmap orders observable product states. Technical Epic files are created only when work is scoped and ready for planning.
+The roadmap orders observable product states. Technical Epic files are created only when work is scoped and ready for planning. Under the [delivery methodology](../epic-delivery-methodology.md), each Epic's product requirements lead to a high-level implementation blueprint that selects technical responsibilities and approach, then a technical design that resolves implementation details and verification. Review those artifacts before implementing the work; the milestone overviews establish dependencies, not a substitute planning format.
 
 | Milestone | Product state | Technical delivery | Exit demonstration |
 | --- | --- | --- | --- |

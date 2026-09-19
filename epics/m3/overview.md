@@ -41,6 +41,13 @@ verification of its addition. Epic 7 consolidates their evidence.
 
 ## Implementation order
 
+Each Epic follows the [delivery methodology](../../epic-delivery-methodology.md):
+its product requirements lead to a high-level implementation blueprint that
+selects responsibilities and approach, then a reviewed technical design before
+code and verification. Blueprint authors use the delivered M2 baseline and the
+dependencies below; technical designs settle the detailed contracts before
+dependent implementation begins.
+
 ### Dependency chain
 
 | Epic | Depends on |

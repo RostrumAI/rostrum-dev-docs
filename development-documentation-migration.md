@@ -1,8 +1,10 @@
 # Development documentation migration
 
-Status: Approved
+Status: Historical migration record.
 
-This plan moves long-form development documentation from `RostrumAI/rostrum` to `RostrumAI/rostrum-dev-docs` and replaces the current task-file hierarchy with roadmap milestones, technical Epics, and one or more implementation plans per active Epic.
+This document records the move of long-form development documentation from `RostrumAI/rostrum` to `RostrumAI/rostrum-dev-docs` and the combined implementation-plan format used during that migration.
+
+The sections below retain the migration-time instructions and task references; they do not define the current delivery process. The [documentation index](README.md) defines the current document locations, and the [delivery methodology](epic-delivery-methodology.md) requires Epic → high-level implementation blueprint → technical design → code and verification for new and resumed implementation.
 
 ## Ownership
 

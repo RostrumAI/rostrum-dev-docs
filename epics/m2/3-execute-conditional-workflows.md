@@ -25,13 +25,13 @@ A workflow chooses one path from its declared conditions. Callers can see which 
 
 A pricing workflow subtracts 10 from an amount of at least 100 and otherwise returns the amount unchanged. An amount of 100 returns 90 through the discount path; an amount of 50 returns 50 through the standard path. The caller can identify the selected path and see that the other path did not execute. Invalid comparison data produces an error rather than selecting the default as a fallback.
 
-This scenario defines the behavior to demonstrate. The implementation plan supplies step definitions, handler choices, input/output schemas, and executable checks for priority overlap, default selection, comparison boundaries, and failures.
+This scenario defines the behavior to demonstrate. The technical design supplies step definitions, handler choices, input/output schemas, and executable checks for priority overlap, default selection, comparison boundaries, and failures.
 
 ## Specification and implementation ownership
 
 The [accepted workflow specification](../../specifications/workflow-interface-v1.md) lists conditional operators but leaves some value semantics open. It also permits a branch without a destination to end the workflow. This Epic resolves those choices in the specification and implementation together, including whether branch priorities must be unique and whether every branch and default requires an explicit destination. Any restriction on accepted documents must follow the governing versioning rules.
 
-Detailed operator tables, error codes, and test procedures belong in the specification and implementation plan. Epic 6 consolidates shared examples and full-system verification; this Epic retains focused verification of conditional behavior.
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint explains how condition evaluation and path selection fit the engine before the technical design specifies their mechanisms and verification. The specification records the detailed operator contract; the technical design defines error codes and test procedures, keeping any public contract changes consistent with the specification. Epic 6 consolidates shared examples and full-system verification; this Epic retains focused verification of conditional behavior.
 
 ## Non-goals
 

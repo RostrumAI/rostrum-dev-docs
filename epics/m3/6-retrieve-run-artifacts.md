@@ -24,11 +24,13 @@ Artifacts are evidence associated with a run, step, and attempt. They are not em
 
 ## Decisions and implementation ownership
 
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint compares local storage approaches and assigns byte, metadata, and retrieval responsibilities. The technical design specifies the write, integrity, and recovery protocols.
+
 Choose where local artifact bytes live. Compare Postgres byte storage, a filesystem/object-style directory, and another self-hostable option against atomic visibility with checkpoint records, size limits, digest verification, backup and cleanup behavior, concurrent access, and operation while the daemon is unavailable. The decision must name the authoritative metadata store, write protocol, path or key isolation, permissions, startup checks, and recovery of orphaned or incomplete content. Do not add a storage abstraction for hypothetical cloud backends, and do not assume Redis is an artifact store without evidence.
 
 Resolve maximum artifact size, supported media types, naming and identity, retention duration, cleanup ownership, and behavior when metadata commits but bytes do not or vice versa. Ensure a failed artifact does not make a successful workflow claim unverifiable evidence. Decide which payloads are sensitive and whether the first local implementation redacts, refuses, or stores them under an explicit policy.
 
-[Epic 1](1-recover-durable-runs.md) owns durable storage and checkpoint atomicity. [Epic 5](5-inspect-run-timelines.md) owns event references and run inspection. [Epic 7](7-complete-m3-conformance.md) verifies the complete retrieval and integrity path. Detailed byte protocols, schemas, and fixture commands belong in implementation plans.
+[Epic 1](1-recover-durable-runs.md) owns durable storage and checkpoint atomicity. [Epic 5](5-inspect-run-timelines.md) owns event references and run inspection. [Epic 7](7-complete-m3-conformance.md) verifies the complete retrieval and integrity path. Detailed byte protocols, schemas, and fixture commands belong in technical designs.
 
 ## Non-goals
 

@@ -43,11 +43,13 @@ Operator controls apply to one run. They do not stop another invocation of the s
 
 ## Decisions and implementation ownership
 
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint selects how operator commands reach durable execution and assigns responsibilities to the services. The technical design defines the command and interruption mechanics.
+
 Resolve command identity and scope, ordering, duplicate behavior, caller identity, state transitions, and precedence among pause, resume, cancellation, retry readiness, and execution outcomes. Define the safe interruption contract for the deterministic reference handler, including acknowledgment, timeout, and the representation of an interruption that cannot be reached. Decide whether local execution needs a forceful fallback and what evidence it leaves.
 
 The implementation must choose the smallest control mechanism compatible with the durable store and one-daemon deployment. Do not add a distributed command bus, leader election, or general task cancellation framework. Define whether command records live in the same authoritative store as run checkpoints and how the daemon observes them without creating a second source of truth.
 
-[Epic 1](1-recover-durable-runs.md) owns durable recovery and shared storage. [Epic 2](2-retry-bounded-failures.md) owns retry policy; this Epic owns their race and precedence. [Epic 4](4-wait-for-human-decisions.md) owns workflow decision waits. Extend the Control API only after these command semantics are defined. Detailed command shapes, interruption interfaces, and scenarios belong in implementation plans.
+[Epic 1](1-recover-durable-runs.md) owns durable recovery and shared storage. [Epic 2](2-retry-bounded-failures.md) owns retry policy; this Epic owns their race and precedence. [Epic 4](4-wait-for-human-decisions.md) owns workflow decision waits. Extend the Control API only after these command semantics are defined. Detailed command shapes, interruption interfaces, and scenarios belong in technical designs.
 
 ## Non-goals
 

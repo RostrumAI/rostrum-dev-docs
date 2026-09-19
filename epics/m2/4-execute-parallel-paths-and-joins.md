@@ -25,7 +25,7 @@ Concurrent runs and parallel paths are different capabilities. Epic 2 allows sev
 
 - Apply a configurable limit to running handlers across the daemon. A limit of one serializes handler execution but still allows multiple accepted runs and ready paths.
 - Show callers the difference between work ready to execute and work currently running. Active-work entries identify the run and step, with an iteration index when Epic 5 adds loops. Their display order does not promise a global execution order.
-- Give each eligible run a bounded opportunity to use capacity as workers become available. A wide or continuously busy run must not occupy every opportunity ahead of another eligible run. The implementation plan defines the scheduling rule and its bound; no progress is promised while every worker remains occupied indefinitely.
+- Give each eligible run a bounded opportunity to use capacity as workers become available. A wide or continuously busy run must not occupy every opportunity ahead of another eligible run. The technical design defines the scheduling rule and its bound; no progress is promised while every worker remains occupied indefinitely.
 - Ensure that a waiting join or parent does not consume the capacity its child work needs. Nested work must remain executable even with one worker.
 
 ### Failures
@@ -40,7 +40,7 @@ Epic 5 adds workflow-configured capture of iteration errors. Parallel work insid
 
 This Epic defines the parallel execution model. Keep the [workflow specification](../../specifications/workflow-interface-v1.md), graph validation, and runtime consistent, applying the governing versioning rules to new restrictions on accepted graphs.
 
-The implementation plan supplies executable workflows, handler choices, scheduling details, and controlled concurrency checks. Epic 6 owns the shared example catalog and real-service test environment; neither is a prerequisite for this Epic's focused verification.
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint selects scheduling and join responsibilities and explains how they interact. The technical design supplies executable workflows, handler choices, scheduling details, and controlled concurrency checks. Epic 6 owns the shared example catalog and real-service test environment; neither is a prerequisite for this Epic's focused verification.
 
 ## Non-goals
 

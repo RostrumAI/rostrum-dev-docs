@@ -13,7 +13,7 @@ A contributor can demonstrate M2 with one command using real services and a shar
 ## Scope
 
 - Define the M2 testing strategy and ownership of checks across the workflow package, runtime, daemon API, and Control API. Earlier Epics retain their focused verification; this Epic consolidates reusable examples, test infrastructure, and full-system evidence.
-- Build a shared catalog from the executable workflows and expected outcomes produced by the Epics 2 through 5 implementation plans. These conformance fixtures check that each layer follows the workflow specification instead of giving the same workflow a different meaning.
+- Build a shared catalog from the executable workflows and expected outcomes specified in the Epics 2 through 5 technical designs and delivered with their implementations. These conformance fixtures check that each layer follows the workflow specification instead of giving the same workflow a different meaning.
 - Cover sequential execution, conditional selection, parallel paths and joins, bounded loops, and the interactions between them. Include rejected requests, unavailable input data, invalid outputs, routing and join failures, and both loop error policies.
 - Exercise each example at the layers that implement its behavior. Validation checks whether a document is acceptable; execution checks what an accepted run does. Transport-specific responses may differ without changing the underlying result or failure.
 - Prove the Epic 1 service boundary with the Control API and daemon on separate network addresses, each independently accessing the same Postgres database. Include authentication, encrypted cross-host communication, configuration errors, readiness, unavailable services, timeouts, and independent shutdown.
@@ -33,7 +33,7 @@ A contributor can demonstrate M2 with one command using real services and a shar
 
 ## Implementation ownership
 
-The implementation plan defines the catalog format, coverage matrix, concurrent-work controls, environment setup, command, and failure diagnostics. It supplies a combined workflow that exercises all M2 constructs, including a parallel failure captured by a loop policy. Detailed graphs, handler choices, inputs, and expected payloads belong with that executable plan and its implementation.
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint selects the conformance approach and assigns responsibilities across the layers and real-service environment. The technical design defines the catalog format, coverage matrix, concurrent-work controls, environment setup, command, and failure diagnostics. It specifies a combined workflow that exercises all M2 constructs, including a parallel failure captured by a loop policy. Detailed graphs, handler choices, inputs, and expected payloads belong in that design and its implementation.
 
 Concurrency evidence must establish dependencies and capacity limits without assuming a fixed global completion order or relying on timing sleeps. Failure comparisons use the errors actually observed; a handler that never started cannot contribute a failure. Any disagreement between layers must be fixed in the owning specification or implementation, not hidden by different expectations in each test adapter.
 

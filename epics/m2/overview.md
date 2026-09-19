@@ -40,6 +40,12 @@ system rather than defining a different execution model.
 
 ## Implementation order
 
+Each Epic follows the [delivery methodology](../../epic-delivery-methodology.md):
+review its product requirements, establish a high-level implementation blueprint
+that selects responsibilities and approach, then review the technical design
+before code and verification. The dependency and parallel-work boundaries below
+guide that decomposition; they do not replace the blueprint or design review.
+
 ### Dependency chain
 
 | Epic | Depends on |

@@ -22,7 +22,7 @@ M2 supports one daemon per deployment, not one workflow execution at a time. A w
 - Use the shared database package for database types and access, with clear ownership of each service's operations. HTTP carries service commands; the services do not coordinate through shared memory, application files, or database polling.
 - Move backend services from `apps/` to `apis/` in the implementation repository and update their workspace, build, deployment, and setup references. Retain `apps/` for user-facing applications such as the web app, mobile app, and TUI.
 
-The implementation plan specifies endpoint bodies, authentication and encryption setup, configuration names, and startup/shutdown mechanics. [Epic 6](6-complete-m2-conformance.md) owns the reusable separate-network test environment. This Epic owns focused verification of its service behavior.
+Following the [delivery methodology](../../epic-delivery-methodology.md), the blueprint selects service responsibilities and the network approach; the technical design specifies endpoint bodies, authentication and encryption setup, configuration names, and startup/shutdown mechanics. [Epic 6](6-complete-m2-conformance.md) owns the reusable separate-network test environment. This Epic owns focused verification of its service behavior.
 
 ## Non-goals
 
