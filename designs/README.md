@@ -12,6 +12,6 @@ Keep execution checkpoints, progress, decisions, evidence, and recovery informat
 
 ## Current designs
 
-No designs have been adopted under this format yet.
+- [Sequential workflow execution](m2-epic-2-sequential-workflows.md) — proposed technical design (2026-09-19) for the M2 Epic 2 execution-engine rework, awaiting review. Its parent blueprint is not yet established; the architecture direction it expands is not yet published under [`blueprints/`](../blueprints/README.md).
 
 The [prior combined-plan records](../README.md#prior-combined-plan-records) preserve earlier technical work but are not reviewed designs under the new process. Re-establish the repository baseline and apply the [resumption requirements](../epic-delivery-methodology.md#resuming-work-from-prior-combined-plans) before using them for implementation.

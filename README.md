@@ -43,7 +43,7 @@ The existing `plans/` documents combine high-level direction, detailed design, a
 - [Daemon network boundary](plans/m2-epic-1-daemon-network-boundary.md) — prior combined plan and recorded checkpoint evidence.
 - [Service framework vocabulary and application tiers](plans/handler-service-vocabulary.md) — prior vocabulary proposal; the controller/service decision records its terminology amendment.
 
-The earlier sequential-execution plan has been superseded by its technical design, which ships under `designs/` in a follow-up pull request.
+The earlier sequential-execution plan has been superseded by its [technical design](designs/m2-epic-2-sequential-workflows.md), filed under `designs/`.
 
 Do not create new combined plans in `plans/` or treat renaming one as completion of the new review gates. Establish the relevant blueprint and technical design against current requirements and the actual repository. The [documentation migration record](development-documentation-migration.md) preserves the earlier repository move, not the current format.
 
