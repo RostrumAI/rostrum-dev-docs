@@ -31,18 +31,18 @@ A caller can distinguish these run states:
 | --- | --- |
 | Queued | Rostrum accepted the invocation, but execution has not started. |
 | Running | Rostrum is advancing the workflow or waiting for currently executing work to finish. |
-| Succeeded | The workflow produced its final result. The result and terminal state cannot change. |
+| Completed | The workflow produced its final result. The result and terminal state cannot change. |
 | Failed | An unhandled error ended execution. The caller can inspect the failures, and no successful final result is available. |
 
 The engine also tracks a stopping phase after an unhandled failure: it starts no new work while already running handlers finish. The public run remains running during this phase, with the observed failures and unfinished work available for inspection. It becomes failed when that work finishes.
 
-Step state explains what happened within the run. Pending steps have not become eligible; ready steps can execute but are waiting for capacity; running steps have started; succeeded steps have validated outputs; failed steps have an execution error. Run inspection must expose these distinctions for active and completed steps while the run remains available in memory. Epic 3 adds the distinction between unselected steps and failed work.
+Step state explains what happened within the run. Pending steps have not been reached; waiting steps have been reached but still need a dependency to complete; ready steps can execute and await dispatch; running steps have started; completed steps have validated outputs; failed steps have an execution error. Here, `completed` means successful completion, not merely that execution stopped. Run inspection must expose these distinctions while the run remains available in memory. Epic 3 adds the distinction between unselected steps and failed work.
 
-The active-work list, `currentSteps`, shows ready and running steps rather than the last completed step or the whole graph. Completed runs have no active work. Its display order is consistent, but it does not imply that separate runs execute in one fixed order. Durable history across daemon restarts belongs to M3.
+The active-work list, `currentSteps`, shows ready and running steps rather than the last completed step or the whole graph. Terminal runs have no active work. Its display order is consistent, but it does not imply that separate runs execute in one fixed order. Durable history across daemon restarts belongs to M3.
 
 ### Passing data and producing a result
 
-- Execute reached steps once, in the workflow's declared sequence. A dependent step cannot start until its required predecessors succeed.
+- Execute reached steps once, in the workflow's declared sequence. A dependent step cannot start until its required predecessors have completed successfully.
 - Let authors supply step inputs from literals, workflow inputs, and earlier successful step outputs. Missing required values or invalid data prevent the affected step from running. An optional input may be omitted, but an explicit reference must resolve.
 - Make step outputs available to later work only after the entire output has passed validation. Failed, incomplete, or not-yet-executed work cannot supply data.
 - Define the supported deterministic task capabilities and their input, output, and failure requirements. A handler performs one step's work; the daemon controls sequencing and workflow completion. The blueprint establishes the task-execution responsibilities and approach; the technical design selects the initial operation set and specifies handler interfaces.
@@ -66,6 +66,6 @@ The [delivery methodology](../../epic-delivery-methodology.md) takes this Epic t
 - A valid invocation returns a stable run ID tied to the selected publication. Invalid requests create no run and start no step.
 - An accepted sequential run completes after its initiating client disconnects, and another client can retrieve its final output or failures.
 - Overlapping invocations of the same publication remain independently identifiable and produce results from their own inputs. A failure in one does not fail another.
-- Run inspection distinguishes queued, active, succeeded, and failed execution, explains waiting or stopping work, and retains completed step outcomes for the lifetime of the in-memory run.
+- Run inspection distinguishes queued, active, completed, and failed execution, explains waiting or stopping work, and retains terminal step outcomes for the lifetime of the in-memory run.
 - Steps follow the declared sequence and consume only available, validated data. Missing inputs and handler failures prevent dependent work from running.
 - The final output is exactly the result step's resolved input object, including an empty object when no result inputs are declared. A failed run has no successful final output, and a terminal run cannot later change its outcome.

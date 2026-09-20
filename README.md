@@ -35,6 +35,7 @@ Durable decisions live under `decisions/`. Research remains under `research/` wh
 
 - [Controller and service vocabulary](decisions/controller-service-vocabulary.md) — the vocabulary used by the framework, Control API, and daemon.
 - [Restart-only server framework](research/restart-only-server-framework.md) — the framework design record; current vocabulary amendments are recorded in the decision above.
+- [Pre-production compatibility](decisions/pre-production-compatibility.md) — breaking changes and clean cutovers are permitted until the first production deployment.
 
 ## Prior combined-plan records
 
