@@ -127,7 +127,7 @@ When preparation refuses, it does so before any run exists, with a typed reason:
 | Unsupported document version or shape, step type, configuration, control flow, binding, or schema | `unsupported_execution` |
 | Missing, undeclared, or invalid invocation inputs | `invalid_inputs` |
 
-A refusal reports sanitized failures with JSON Pointer locations, up to 32 real failures. Publication findings remain the authoring validator's contract; these failures explain why this daemon can't accept an invocation.
+A refusal reports every failure it finds, sanitized and located with JSON Pointers. Publication findings remain the authoring validator's contract; these failures explain why this daemon can't accept an invocation.
 
 ### D3 — Declared input and output schemas are checked with Ajv
 
@@ -169,7 +169,7 @@ The daemon handles an invocation in this order:
 1. Retrieve the selected publication through `WorkflowRepository.getPublication`. A missing row becomes `publication_not_found`, and `DigestVerificationError` becomes `corrupt_publication`. A database connection or query failure means the service is unavailable, not that the content is corrupt.
 2. Build the publication binding from the requested `workflowId` and the retrieved publication number, format version, digest, and canonical text. The repository's `Publication` type doesn't include `workflowId`, and preparation still has to confirm that the document identity matches the binding.
 3. Call the preparer. Unknown operations and configuration, conditionals, loops, and more than one distinct successor are refused as `unsupported_execution`. Supported definitions with disconnected steps are still accepted and inspectable. A self-dependency is refused with a located failure before any run exists.
-4. Validate the invocation inputs and reserve space in the run's inspection snapshot for later status changes, timestamps, and failures (see [Limits and configuration](#limits-and-configuration)). Take one owned copy of the inputs for the run instead of copying them again at each layer.
+4. Validate the invocation inputs. Take one owned copy of the inputs for the run instead of copying them again at each layer.
 5. After the asynchronous publication read, check again that the request hasn't been cancelled, hasn't passed its deadline, and that the process is still admitting runs. Then, in one synchronous section: register the run as independent process work, create the run ID, insert its state, and schedule its first advancement. If this section can't finish, remove the half-created state, release the registration, and dispatch nothing.
 6. Return 202 with the `runId`, the exact publication binding, and `status: queued`. Sending that response is independent of execution, so a GET that follows immediately may already see a finished run.
 
@@ -273,10 +273,10 @@ When work finishes, the result goes back to the engine, not to a node that looks
 
 1. Match both the run ID and the work ID against the dispatched work and its still-running visit. Unknown, wrong-run, stale, and duplicate deliveries can't commit anything or release successors. If a known dispatch's promise comes back with a mismatched identity, fail that dispatch as `execution_error` rather than leaving it running forever.
 2. For a task failure, attach the known step ID and commit the sanitized failure. For a success, validate the full operation output and every declared output member. The built-in operations return flat objects of strings or finite numbers, and their concrete output schemas reject anything else. They aren't an arbitrary plugin boundary that needs a second generic JSON validator.
-3. Charge the output against the run's snapshot budget before keeping it. Once every check passes, make one owned, immutable copy of the output and commit it with the completed visit state in the same synchronous step. Invalid, partial, oversized, or later-mutated handler output must never become another step's input.
+3. Once every check passes, make one owned, immutable copy of the output and commit it with the completed visit state in the same synchronous step. Invalid, partial, or later-mutated handler output must never become another step's input.
 4. Ask the node what comes next and schedule advancement. A repeated delivery can't repeat this step, because the work is already settled. When the promise actually settles, clear the work's timer and abort listener and release its ownership.
 
-The result step goes through the same binding, declared-output, and budget checks, but it isn't sent to the executor. Its values come from invocation inputs, publication literals, or validated task outputs. Its resolved input object is the final output, exactly, including an empty object. The completed result visit and the run's final result are committed together. No failure path ever produces a successful final output.
+The result step goes through the same binding and declared-output checks, but it isn't sent to the executor. Its values come from invocation inputs, publication literals, or validated task outputs. Its resolved input object is the final output, exactly, including an empty object. The completed result visit and the run's final result are committed together. No failure path ever produces a successful final output.
 
 ### D9 — Share the run vocabulary, not the invocation API
 
@@ -292,7 +292,7 @@ Status: proposed.
 
 Dead-run and timeout causes are reported through `ExecutionFailure.code`, next to the run status and `stopping` flag, rather than through a separate, loosely related substatus field.
 
-The new shared `ExecutionFailure` shape has a code, a message, a JSON Pointer path, and a step ID when a step is responsible. The codes are `self_dependency`, `unmet_dependencies`, `missing_result`, `task_timeout`, `execution_error`, `task_error`, `numeric_overflow`, `division_by_zero`, and `run_snapshot_limit`. Preparation uses `self_dependency`; the others describe failures in accepted runs. Dependency paths point into the publication. Operation errors point into the operation's input or output. Timeouts and engine-wide errors use the empty pointer when there's no narrower location. Messages are bounded and sanitized.
+The new shared `ExecutionFailure` shape has a code, a message, a JSON Pointer path, and a step ID when a step is responsible. The codes are `self_dependency`, `unmet_dependencies`, `missing_result`, `task_timeout`, `execution_error`, `task_error`, `numeric_overflow`, and `division_by_zero`. Preparation uses `self_dependency`; the others describe failures in accepted runs. Dependency paths point into the publication. Operation errors point into the operation's input or output. Timeouts and engine-wide errors use the empty pointer when there's no narrower location. Messages are sanitized.
 
 ### D11 — Breaking changes are allowed before production
 
@@ -352,7 +352,6 @@ Runs live only in memory. Restarting the daemon loses every M2 run, even after a
 These review findings from the closed attempt still apply:
 
 - **Unusual key names.** Binding maps must keep names like `__proto__`, `constructor`, and dotted input names by using maps or own-property definitions and lookups. Tests should prove the binding keeps the supplied value. We don't need a generic object-introspection framework for this.
-- **Refusal lists.** Refusals are capped at 32 real, located failures. Drop any synthetic "and N more" entry rather than presenting it as a document problem. Tests check the cap and the useful failures kept, not the wording.
 - **Identifier format.** Identifier fields use one UUID v7 pattern. Export the workflow package's existing pattern for the daemon's execution schemas instead of defining a second one.
 - **Self-dependency** is covered [above](#self-dependency).
 
@@ -371,13 +370,13 @@ Each application keeps one error envelope. The Control API extends its `ErrorRes
 | Malformed JSON, invalid envelope, or invalid path ID | 400 with the application error envelope. No run is created. |
 | Invocation body over the configured limit | 413 while the body is being read. The publication isn't looked up. |
 | Missing publication, or an unknown or restart-lost run | 404: `publication_not_found` for invocation, `run_not_found` for inspection. |
-| Unsupported execution, invalid workflow inputs, or an initial snapshot over budget | 422 with the matching refusal reason and located failures. |
+| Unsupported execution or invalid workflow inputs | 422 with the matching refusal reason and located failures. |
 | Corrupt stored publication | 500 with `corrupt_publication` and a sanitized refusal. Never return the stored content or the underlying exception. |
 | Database unavailable, or the process has stopped admitting | 503 with a service-availability or draining code, not a made-up domain refusal. |
 | Daemon connection, TLS, or authentication failure, or a malformed daemon response | Control API returns 502 with distinct sanitized daemon failure codes. A valid upstream `service_draining` becomes 503. |
 | Daemon request deadline | Control API returns 504 `daemon_timeout`. POST is never retried automatically. |
 
-The Control API's `clients/daemon.ts` gains invocation and retrieval calls, plus a private request function shared with the readiness check. It keeps direct Node HTTP/HTTPS transport, certificate checks, the newest configured bearer token, abort handling, and bounded response reads. The existing `dependencyTimeoutMs` budget covers the whole request, including reading the body. The client validates response schemas and identities: an acceptance must match the requested workflow and publication, and an inspection must match the requested run. Valid responses are forwarded as-is, without rebuilding execution state or exposing the daemon's URL.
+The Control API's `clients/daemon.ts` gains invocation and retrieval calls, plus a private request function shared with the readiness check. It keeps direct Node HTTP/HTTPS transport, certificate checks, the newest configured bearer token, and abort handling. The readiness check keeps its 64 KiB response limit; run calls read the whole response. The existing `dependencyTimeoutMs` budget covers the whole request, including reading the body. The client validates response schemas and identities: an acceptance must match the requested workflow and publication, and an inspection must match the requested run. Valid responses are forwarded as-is, without rebuilding execution state or exposing the daemon's URL.
 
 ### Request size and JSON parsing
 
@@ -394,21 +393,13 @@ Each setting goes through the application's existing configuration schema, defau
 | Setting | Default and constraint | Used by |
 | --- | --- | --- |
 | `runMaxRequestBytes` / `RUN_MAX_REQUEST_BYTES` | 1 MiB. A positive safe integer that fits within the listener's body limit. | Both services' run body decoders. |
-| `runMaxSnapshotBytes` / `RUN_MAX_SNAPSHOT_BYTES` | 8 MiB. Must leave room for structural state and a 64 KiB diagnostic reserve. | Daemon admission and output commits, and the Control API when reading inspection responses. |
 | `runTaskTimeoutMs` / `RUN_TASK_TIMEOUT_MS` | 30,000 ms. A positive safe integer within the runtime timer's range. | Daemon task claims only. Independent of HTTP and shutdown deadlines. |
 
-The readiness client keeps its 64 KiB cap. Acceptance responses and error envelopes use the same cap; successful inspection responses use the snapshot setting instead.
+Run responses have no size limit yet. A refusal lists every failure found, inspection returns every committed output, and the Control API's daemon client reads run responses in full. Only the existing readiness check keeps its 64 KiB response limit. Response limits can be added later if real workloads need them.
 
-The snapshot budget is what keeps an inspection response from growing without bound. `run-observation.ts` measures the encoded UTF-8 size, not JavaScript string length:
+The Control API forwards invocation bodies to the daemon, so the daemon's `RUN_MAX_REQUEST_BYTES` must be at least the Control API's. M2 has no negotiation between them.
 
-- Before admission, it reserves space for the largest output-free step and current-work entries, timestamp growth, and bounded diagnostics.
-- Before each output commit, it adds that output's encoded size. A result appears both in its step and in the run's final output, so it's counted twice.
-- An output that would push the run over the limit fails as `run_snapshot_limit`. Earlier outputs are kept, along with enough space to explain the failure.
-- The engine doesn't serialize the whole run after every dependency check, or keep duplicate full snapshots, just to count bytes.
-
-Diagnostics, including escaped pointer and name lengths, are bounded to fit in the reserve. An inspection response is never truncated into invalid or misleading data. If a full failure location won't fit, keep the step identity and a valid enclosing pointer instead of cutting a pointer short. Both applications must be configured with compatible limits; M2 has no negotiation between them.
-
-Finished runs stay in memory until the daemon exits; nothing evicts them. The per-run limits don't cap total memory use or total schema evaluation time. Operators need to know this; this work doesn't quietly add a retention or global capacity policy.
+Finished runs stay in memory until the daemon exits; nothing evicts them. Nothing limits the size of a run's outputs, total memory use, or total schema evaluation time. Operators need to know this; this work doesn't quietly add a retention or global capacity policy.
 
 ## Shutdown
 
@@ -443,7 +434,7 @@ The daemon's new modules live under `apis/daemon/src/services/runs/`. None of th
 | `execution/run-state.ts` | Defines run state, the `VisitState` variants, and the allowed transitions. Only the engine writes them. |
 | `execution/execution-node.ts` | Holds `ExecutionNode`, `TaskExecutionNode`, and `ResultExecutionNode`. They're small, so they share a file; a later node type can get its own file when its behavior justifies it. |
 | `execution/workflow-engine.ts` | Owns accepted runs, advancement, ready notifications, claims, completion matching, deadlines, and lifecycle release. |
-| `execution/run-observation.ts` | Builds consistent inspection snapshots and tracks their encoded size at admission and at each output commit. |
+| `execution/run-observation.ts` | Builds consistent inspection snapshots from run state. |
 
 The Control API gets its own `services/runs/run-service.ts`. It calls the authenticated daemon client; it never builds an engine or queries publications. The [HTTP API](#http-api), [Limits and configuration](#limits-and-configuration), and [Shutdown](#shutdown) sections cover the controller, client, configuration, and process-factory changes in both applications.
 
@@ -463,7 +454,7 @@ The implementing engineer owns each checkpoint and records its pull request and 
 
 **Owner and review:** the implementing engineer. API and specification reviewers check refusal reasons and locations, the shared inspection schemas, and the v1 fix. This review doesn't reopen the owner's `completed` or pre-production decisions.
 
-**Verification:** keep the digest-vector tests. Add graph-stage tests for reachable and unreachable self-dependency. Test preparation refusals, literal-key bindings, declared-schema checking, and the refusal cap. Preparing the [worked example](#worked-example) directly, with no HTTP or Postgres, resolves its bindings and refuses a string amount, a missing input, an undeclared input, and an unknown operation, each with its own reason and location. `bun run check` and `bun test` pass. No schema-enum snapshot or JSON-guard suite is needed.
+**Verification:** keep the digest-vector tests. Add graph-stage tests for reachable and unreachable self-dependency. Test preparation refusals, literal-key bindings, declared-schema checking, and complete refusal lists. Preparing the [worked example](#worked-example) directly, with no HTTP or Postgres, resolves its bindings and refuses a string amount, a missing input, an undeclared input, and an unknown operation, each with its own reason and location. `bun run check` and `bun test` pass. No schema-enum snapshot or JSON-guard suite is needed.
 
 **Recovery and handoff:** nothing in production uses the vocabulary yet. Revert the workflow-package and daemon changes together so no consumer is left on a half-published contract.
 
@@ -523,13 +514,13 @@ Also reuse `minimum.json` for an empty result and `sequential.json` for the gree
 | Location | Setup and what we should see |
 | --- | --- |
 | New `packages/workflow/src/execution.test.ts` | Waiting snapshots identify unmet dependencies. Stopping snapshots include failures and outstanding work. A terminal failure can't carry a successful output or active work. No tests that only pin enum lists or wording. |
-| New daemon preparation and input/output-schema tests | A number declaration rejects a string without coercing it. Malformed schemas and unresolved external references are refused before admission. Valid local references work. `format` annotations don't reject values. Literal prototype-sensitive and dotted names keep their values. An omitted optional input behaves differently from null and from an unresolved explicit binding. Refusals never exceed 32 real failures. |
+| New daemon preparation and input/output-schema tests | A number declaration rejects a string without coercing it. Malformed schemas and unresolved external references are refused before admission. Valid local references work. `format` annotations don't reject values. Literal prototype-sensitive and dotted names keep their values. An omitted optional input behaves differently from null and from an unresolved explicit binding. A refusal lists every failure found, not just the first. |
 | New `execution/workflow-engine.test.ts` | Reverse the declared step order; repeat advancement, queue delivery, and completion; return an immediately resolved result. Each reached task runs once, each successor sees only committed output, and wrong-run or stale results can't corrupt another visit. |
 | The same engine suite, with controlled visit states and executors | Create one visit whose dependencies aren't all completed, then satisfy them and see exactly one dispatch. No outstanding work plus unmet dependencies fails with a location. No continuation and no result fails with a different code. A pending disconnected step doesn't fail a successful run. These internal cases don't enable parallel invocation. |
 | The same engine suite, with controlled settlement and clock | Hold one run while a second completes or fails; their inputs and outcomes stay separate. A task deadline stops new work, stays stopping until the task actually settles, and ignores late output. Terminal state doesn't change on repeated delivery or inspection. |
 | New tests next to the operation modules | Divide by zero and negative zero, and trigger arithmetic overflow, through the local executor. Check for the specific domain failure, not just that a promise resolves. |
-| New engine and snapshot checks | Return an operation output with the wrong type, a missing required member, or a non-finite number; no invalid output reaches a successor. Mutating a returned object can't change committed output. An oversized output fails while earlier data stays inspectable. Escaped and multibyte values, and the result's two appearances, are counted correctly. |
-| New run-service and controller or client tests next to those modules | Cover every HTTP outcome in the table. Malformed, wrong-identity, and oversized upstream responses fail safely. POST is never retried. Both services accept and refuse the same invocation envelopes. Authoring's existing decoder and error shapes still work. Race cancellation against admission with a delayed publication lookup, and check that no late run appears. |
+| New engine and snapshot checks | Return an operation output with the wrong type, a missing required member, or a non-finite number; no invalid output reaches a successor. Mutating a returned object can't change committed output. |
+| New run-service and controller or client tests next to those modules | Cover every HTTP outcome in the table. Malformed and wrong-identity upstream responses fail safely. POST is never retried. Both services accept and refuse the same invocation envelopes. Authoring's existing decoder and error shapes still work. Race cancellation against admission with a delayed publication lookup, and check that no late run appears. |
 | Existing `packages/server/src/lifecycle.test.ts`, `lifecycle.fixture.ts`, and restart tests | Hold an HTTP body, a queued run, and task work during drain. A clean exit waits for all of them. Accepted continuations still run. An uncooperative task forces a bounded nonzero exit. Repeated signals close resources only once. SIGHUP changes nothing. |
 
 ### Real-service scenarios
@@ -544,7 +535,7 @@ The service script sets up and tears down its own environment. It creates a disp
 - **Disconnects and restarts.** Disconnect after acceptance and reconnect from another client. Restart only the Control API and retrieve the same daemon-owned run. Repeated POSTs create different runs; repeated GETs change nothing.
 - **Newer publications.** Publish a newer publication after invoking. The accepted run still reports its original publication number and digest, and the matching result.
 - **Database loss.** Remove database access after acceptance. Existing runs keep executing and GET still works; readiness and new invocations report a dependency failure. If a task must be held at this point, use a controlled test composition rather than a production delay operation.
-- **Limits.** Configure matching non-default limits. Oversized streamed invocations fail before lookup. Snapshots larger than the readiness cap still come back intact when they're within the run limit. An output over budget produces an inspectable failure, not a truncated response.
+- **Limits.** Configure non-default request limits. Oversized streamed invocations fail before lookup. An inspection response larger than the readiness check's 64 KiB limit comes back intact.
 - **Daemon restart.** Shut down and restart the daemon; old run IDs return 404. Use the lifecycle fixture for deterministic in-flight drain and forced-exit races, since fast arithmetic can't reliably hit those timings.
 
 After implementation, record command output, pull-request links, review outcomes, and any remaining acceptance gap in [Progress](#progress). A passing direct smoke doesn't stand in for the service scenarios, and a passing service smoke doesn't prove that blocked JavaScript can be interrupted.
