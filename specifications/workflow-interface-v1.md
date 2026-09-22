@@ -318,17 +318,24 @@ Validation starts from raw text and runs an eight-stage pipeline in a fixed orde
 | 5. Conditional semantics | Branch and default present; every condition-referenced step listed in `dependencies`; operators from the allowed set; leaf refs well-formed | Identity, Graph |
 | 6. Path and termination | Every reachable path ends at a terminal `result` step or an end-workflow branch; terminal steps outside loop bodies typed `result` | Graph, Conditional |
 | 7. Data references | Every `{ "ref": "..." }` syntactically valid and resolvable to a declared input, an upstream step output, or an in-scope loop variable | Identity, Graph |
-| 8. Input and output compatibility | Existence and ordering checks from stage 7; type-level compatibility advisory only in v1 | Data references |
+| 8. Input and output compatibility | Declared input and output schemas are valid JSON Schema 2020-12; no binding's producer and consumer types are definitely incompatible. See [Input and output compatibility](#input-and-output-compatibility) | Data references |
 
 ### Findings
 
 Each finding carries: `code` (a stable dot-namespaced identifier such as `workflow.graph.cycle` — the contract; message text is not), `message` (human-readable), `blocking` (whether it prevents publication), `path` (JSON Pointer, RFC 6901), `line` and `column` (from the source map when text is available), `relatedLocations` (additional pointers for cross-reference conflicts), and `details` (structured context for automated repair).
 
-All findings are blocking in v1 except advisory input/output type mismatches.
+All findings are blocking in v1.
 
 ### Input and output compatibility
 
-v1 checks that each reference resolves to a declared input or output and that the producing step completes before the consuming step. It does not compare the producer's and consumer's JSON Schema fragments beyond that existence check. A runtime may still fail when a step produces a value whose shape does not satisfy the consumer; static compatibility is intentionally limited in v1. Adding a blocking type-compatibility check follows the [breaking-change rules](#breaking-and-additive-changes).
+v1 checks that each reference resolves to a declared input or output and that the producing step completes before the consuming step.
+
+A blocking static compatibility check is [approved for v1 in place](../decisions/pre-production-compatibility.md#boundaries-and-consequences). It is not yet recorded here as implemented or verified; [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) owns that work. Under it, validation reports:
+
+- a blocking finding for each declared workflow input or step output schema that is not a valid JSON Schema 2020-12 schema;
+- a blocking `workflow.io.type-mismatch` finding when a binding's producer and consumer can never agree: their JSON Schema `type` sets don't overlap, with `integer` counted as `number`, or a literal value fails the consumer's schema.
+
+A task's consumer schema is its operation's input schema, taken from the operation catalog of the validating release. A step's declared output schema is also compared with its operation's output schema. A schema without `type` accepts any type, and other keywords are not compared, so a runtime may still fail when a produced value does not satisfy a consumer. The executing runtime repeats the check with its own catalog before it accepts a run.
 
 ## Examples
 
