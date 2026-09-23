@@ -73,7 +73,7 @@ The daemon doesn't depend on `@rostrum/workflow` or `uuid` yet. Checkpoint 1 add
 
 ## How the pieces fit together
 
-A **publication** is the immutable workflow definition Rostrum already stores. A **run** is one invocation of a publication with a fixed set of inputs. Many runs can share one publication without sharing any execution state.
+A **publication** is the immutable workflow definition Rostrum already stores. A **run** is one invocation of a publication with a fixed set of inputs. A run records its publication when it's accepted and never reads it again, so a later publication can't change it. Many runs can share one publication without sharing any execution state.
 
 A **visit** is one step that a run has reached. Each run has a **run context** holding its accepted inputs and a map of visit states. The map records which steps were reached, their status, and their committed outputs or failures. A step with no visit is pending. This is ordinary in-memory state, not a database record or a history of every change.
 
@@ -109,14 +109,14 @@ Publishing already validates a revision, canonicalizes it once (RFC 8785), and s
 
 Preparation answers a narrower question: can this daemon release execute this publication? It trusts the validation done at publish time and does not call `createWorkflowValidator` again. Because the two processes can run different releases, it still checks the daemon's supported format and capabilities.
 
-`prepare` takes a parsed document plus, for an invocation, its publication binding, rather than a repository `Publication`. It collects every failure it finds instead of stopping at the first:
+`prepare` takes a parsed document plus, for an invocation, the run's publication (its workflow ID, publication number, format version, and digest), rather than the repository's `Publication` row. It collects every failure it finds instead of stopping at the first:
 
 1. Parse the integrity-checked canonical text with `JSON.parse`, and check its format and document shape with the existing `WorkflowDocumentSchema`. This confirms the daemon can read the document without repeating graph, termination, or reference validation. Check that the document ID and format match the stored publication.
 2. Check that every declared step is supported, not just the ones on the reachable path. Each task needs a supported operation and configuration; a result step has no configuration; there's no conditional or loop behavior; and each step has at most one distinct successor. Refuse a step that depends on itself, even in a publication created before the validator fix.
 3. Compile the workflow input schemas and step output schemas into checks for actual values, with the shared schema compiler (see [D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv)). If this release can't interpret a schema, refuse it rather than silently ignoring a constraint the author expects to be enforced.
 4. Run the shared static compatibility check ([D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation)) with this daemon's operation catalog. A publication that passed under a different Control API release can still be refused here.
 5. Turn every binding into either a literal owned by the prepared workflow or a reference the engine can resolve during the run.
-6. Build the **prepared workflow**: an immutable, process-local object holding the publication binding, the entry step, every declared step by ID, each step's successors and dependencies, its prepared bindings, its declared outputs, and the compiled checks.
+6. Build the **prepared workflow**: an immutable, process-local object holding its publication, the entry step, every declared step by ID, each step's successors and dependencies, its prepared bindings, its declared outputs, and the compiled checks.
 
 Checking the invocation inputs is a separate function, `validateInputs(prepared, inputs)`, which runs once per run. Everything in `prepare` depends only on the publication and the daemon release.
 
@@ -132,7 +132,7 @@ When preparation refuses, it does so before any run exists, with a typed reason:
 
 | Situation | Reason |
 | --- | --- |
-| Invalid stored JSON, a digest or canonicalization failure, or a document identity that doesn't match its stored binding | `corrupt_publication` |
+| Invalid stored JSON, a digest or canonicalization failure, or a document identity that doesn't match its publication | `corrupt_publication` |
 | Unsupported document version or shape, step type, configuration, control flow, binding, or schema, or a binding whose types can never match | `unsupported_execution` |
 | Missing, undeclared, or invalid invocation inputs | `invalid_inputs` |
 
@@ -185,11 +185,11 @@ Invocation follows the existing tier boundaries: Control API controller → Cont
 The daemon handles an invocation in this order:
 
 1. Retrieve the selected publication through `WorkflowRepository.getPublication`. A missing row becomes `publication_not_found`, and `DigestVerificationError` becomes `corrupt_publication`. A database connection or query failure means the service is unavailable, not that the content is corrupt.
-2. Build the publication binding from the requested `workflowId` and the retrieved publication number, format version, digest, and canonical text. The repository's `Publication` type doesn't include `workflowId`, and preparation still has to confirm that the document identity matches the binding.
+2. Record the run's publication: the requested `workflowId` plus the retrieved publication number, format version, digest, and canonical text. The repository's `Publication` type doesn't include `workflowId`, and preparation still has to confirm that the document identity matches it.
 3. Call the preparer. Unknown operations and configuration, conditionals, loops, and more than one distinct successor are refused as `unsupported_execution`. Supported definitions with disconnected steps are still accepted and inspectable. A self-dependency is refused with a located failure before any run exists.
 4. Validate the invocation inputs. Take one owned copy of the inputs for the run instead of copying them again at each layer.
 5. After the asynchronous publication read, check again that the request hasn't been cancelled, hasn't passed its deadline, and that the process is still admitting runs. Then, in one synchronous section: register the run as independent process work, create the run ID, insert its state, and schedule its first advancement. If this section can't finish, remove the half-created state, release the registration, and dispatch nothing.
-6. Return 202 with the `runId`, the exact publication binding, and `status: queued`. Sending that response is independent of execution, so a GET that follows immediately may already see a finished run.
+6. Return 202 with the `runId`, the run's publication, and `status: queued`. Sending that response is independent of execution, so a GET that follows immediately may already see a finished run.
 
 ```mermaid
 sequenceDiagram
@@ -203,13 +203,13 @@ sequenceDiagram
     CAPI->>DRS: POST /api/runs (bearer token)
     DRS->>Repo: getPublication(workflowId, publicationNumber)
     Repo-->>DRS: publication, null, or DigestVerificationError
-    DRS->>Prep: prepare(document, binding)
+    DRS->>Prep: prepare(document, publication)
     Prep-->>DRS: prepared workflow or refusal
     DRS->>Prep: validateInputs(prepared, inputs)
     Prep-->>DRS: owned inputs or refusal
     Note over DRS,Engine: Recheck cancellation, deadline, and admission.<br/>One synchronous section: register work, create the run ID,<br/>insert run state, schedule the first advancement.
     DRS->>Engine: admit run
-    DRS-->>CAPI: 202 runId, binding, status queued
+    DRS-->>CAPI: 202 runId, publication, status queued
     CAPI-->>Client: 202 with Location
     Note over Engine: The daemon owns the run from here.<br/>The request's signal no longer cancels it.
     Engine->>Engine: advanceWorkflow(runId) in a later turn
@@ -581,7 +581,7 @@ The daemon's new modules live under `apis/daemon/src/services/runs/`. None of th
 | New file | What it does |
 | --- | --- |
 | `run-service.ts` | `RunService.invokeWorkflow` retrieves, prepares, and admits a run; `getRun` returns its current state or not-found. The daemon's run controllers call it. Startup injects the repository, preparer, engine, and the process's work registration. |
-| `execution/publication-preparer.ts` | `prepare(document, binding)` runs the capability checks, including the shared compatibility check, and builds the prepared workflow. `validateInputs(prepared, inputs)` checks one run's inputs. Reuses document schemas, reference helpers, and the operation catalog from `@rostrum/workflow`; doesn't call the publication validator. |
+| `execution/publication-preparer.ts` | `prepare(document, publication)` runs the capability checks, including the shared compatibility check, and builds the prepared workflow. `validateInputs(prepared, inputs)` checks one run's inputs. Reuses document schemas, reference helpers, and the operation catalog from `@rostrum/workflow`; doesn't call the publication validator. |
 | `execution/input-output-schemas.ts` | Uses the shared schema compiler to build value checks and maps its errors to located execution failures. No parser, JSON guard, or schema-rewriting framework. |
 | `execution/operations/greet.ts`, `add.ts`, `divide.ts` | One implementation per module, each typed against its declaration from `@rostrum/workflow`. |
 | `execution/operations/registry.ts` | Pairs each catalog declaration with its implementation in one static map, and receives any outside resources an implementation needs at startup. The local executor uses it. There's no dynamic plugin loader. |
