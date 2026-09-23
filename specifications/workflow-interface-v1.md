@@ -4,11 +4,11 @@
 | --- | --- |
 | Status | Accepted |
 | Machine-readable schema source | [`packages/workflow/src/schema.ts`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/src/schema.ts) |
-| Last updated | 2026-08-28 |
+| Last updated | 2026-09-20 |
 
 ## What this specification defines
 
-This specification defines workflow format v1: the JSON document that describes a workflow, the validation contract that decides whether a document can be published, the lifecycle that turns drafts into immutable publications, and the versioning rules that keep every published v1 document readable forever.
+This specification defines workflow format v1: the JSON document that describes a workflow, the validation contract that decides whether a document can be published, the lifecycle that turns drafts into immutable publications, and the rules for evolving the format. Before the first production deployment, the [pre-production compatibility decision](../decisions/pre-production-compatibility.md) permits breaking changes to v1 in place.
 
 Five consumers read this contract:
 
@@ -39,11 +39,22 @@ Those Epics own resolving the execution semantics and any change to the rules be
 | `name` | string | **required** | Workflow name. Display-only; see [Field classification](#field-classification). |
 | `description` | string | optional | Workflow description. Display-only. Defaults to absent. |
 | `firstNode` | string (UUID v7) | **required** | The `id` of the step where execution begins. |
-| `inputs` | object | optional | Workflow inputs. Each key is an input name; each value is a JSON Schema 2020-12 fragment describing the accepted value. Defaults to `{}`. |
+| `inputs` | object | optional | Workflow inputs. Each key is an input name; each value is an [input declaration](#input-declarations). Defaults to `{}`. |
 | `steps` | array | **required** | Unordered list of step objects. Minimum length 1. Execution order follows the graph topology, never array order; the visual editor determines display order. |
 | `conditionals` | array | optional | List of conditional objects used for evaluated routing. Defaults to `[]`. See [Conditionals](#conditionals). |
 
 "Required" in the field tables means required for a valid, publishable document. Drafts are held to a lower bar on purpose: any syntactically valid JSON saves as a draft, and a fresh workflow missing `firstNode` or `steps` saves with those missing-field findings attached (see [Saving a draft](#saving-a-draft)). The schema rules below therefore describe the publishable end state, not what the editor must show at every moment.
+
+### Input declarations
+
+A workflow input is declared as an object with these fields, and no others:
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `schema` | object or boolean | **required** | A JSON Schema 2020-12 schema describing the accepted value. |
+| `default` | any JSON value | optional | Makes the input optional. When an invocation omits the input, the run uses this value. It must be valid against `schema`. |
+
+An input without `default` is required. An explicit `null` is a supplied value, not an omission, so it never receives the default. JSON Schema's own `default` keyword inside `schema` is an annotation and never supplies a value. Operation arguments in the operation catalog are declared with the same shape: an argument without `default` must be bound, and an unbound argument with `default` receives it. Optional means the value may be omitted; an explicit reference is never replaced by the default and must still resolve.
 
 ### Step fields
 
@@ -82,19 +93,21 @@ A step type is a registry entry keyed by its `type` string. The entry contribute
 
 - A step whose `type` is not registered is a blocking finding. The workflow is invalid, never silently reinterpreted.
 - Adding a step type never changes the base document shape. It is a backward- and forward-compatible extension: older releases reject the new type explicitly as unsupported, and newer releases read existing types identically.
-- A registered type's `config` schema may be relaxed within v1. A change that invalidates a previously valid `config` requires a new format version or a new type name (see [Breaking and additive changes](#breaking-and-additive-changes)).
+- A registered type's `config` schema may be relaxed within v1. After the first production deployment, a change that invalidates a previously valid `config` requires a new format version or a new type name. Before production, it may change in place under [Breaking and additive changes](#breaking-and-additive-changes).
 
 ## Graph topology
 
-The step graph is a directed acyclic graph (DAG). These rules are enforced at validation time:
+The step graph is a directed acyclic graph (DAG). Publication validation must enforce these rules:
 
-1. **Acyclic.** No step may transitively depend on itself. A cycle is a blocking validation error.
+1. **Acyclic.** No step may directly or transitively depend on itself. In particular, a step's `dependencies` must not contain its own ID. A cycle or direct self-dependency is a blocking validation error.
 2. **Forward-only edges.** `successors`, `branches[].next`, `default.next`, and `loop.body` must reference steps that do not transitively lead back to the current step.
-3. **Dependency reachability.** Every step listed in a `dependencies` array must be reachable on all paths from `firstNode` to the dependent step (the merge-after-branch restriction). This prevents a step from waiting on a predecessor that may not execute on every branch path. Relaxing this restriction is deferred to a future format version.
+3. **Dependency reachability.** Every step listed in a `dependencies` array must strictly precede the dependent step on all paths from `firstNode` to that step (the merge-after-branch restriction). This prevents a step from waiting on itself or on a predecessor that may not execute on every branch path. Any future relaxation follows the [versioning rules](#breaking-and-additive-changes).
 4. **Fan-out parallelism.** When a step has multiple `successors`, all successors start in parallel when the step completes. There is no ordering guarantee among parallel successors.
 5. **Fan-in via dependencies.** A step with multiple `dependencies` starts only after all dependencies have completed. This enables join points where parallel branches converge.
 6. **Terminal steps.** A step with neither `successors` nor `conditional` is terminal. A terminal step outside a loop body must be typed `result`. Within a loop body, the terminal step may be any type, and its outputs are collected per iteration.
 7. **Path endings.** Every reachable path ends at a terminal `result` step or at a conditional branch or default whose `next` is omitted. An end-workflow branch ends the run with the conditional step's resolved outputs as the terminal result.
+
+The direct self-dependency correction is [approved for v1 in place](../decisions/pre-production-compatibility.md#boundaries-and-consequences). It is not yet recorded here as implemented or verified; [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) owns that work. This restriction applies to a step's own `dependencies`, not to a conditional's dependency on the step whose outputs it evaluates.
 
 ## Data references
 
@@ -106,7 +119,7 @@ A binding value is either a JSON literal (string, number, boolean, object, array
 
 A reference resolves to the referenced value at execution time. A `result` step binds its `inputs` the same way, and the resolved object is the run's terminal result.
 
-A JSON object whose only key is `ref` with a string value is always interpreted as a reference, never as a literal. Passing such a literal object requires an escape syntax that no v1 workflow needs; if one appears, an escape syntax will be defined in a future format version.
+A JSON object whose only key is `ref` with a string value is always interpreted as a reference, never as a literal. There is no escape syntax in the current contract. Adding one follows the [versioning rules](#breaking-and-additive-changes).
 
 Validation checks that each reference resolves to a declared workflow input, a declared output of an existing step that completes before the consumer, or a loop variable in scope. How thoroughly v1 compares producer and consumer types is defined in [Input and output compatibility](#input-and-output-compatibility).
 
@@ -191,11 +204,11 @@ Loop rules:
 
 ### Version selection
 
-Rostrum supports a set of format versions by retaining one immutable rule set per version: the document schema plus the step-type registry. v1 is the first such set. Rule selection is an exact match on `workflowFormatVersion`. An unknown version is a blocking finding, never a silent fallback to v1 or to the nearest version.
+Rostrum selects a rule set by exact match on `workflowFormatVersion`: the document schema, step-type registry, and execution rules. v1 is the first such set. An unknown version is a blocking finding, never a silent fallback to v1 or to the nearest version. There is no separate schema or execution version.
 
-Every future release retains the frozen v1 rule set, so a v1 document keeps validating and executing identically forever. Recognition means "validated and executed with v1 semantics", never "migrated to the newest version". There is no automatic upgrade or rewriting: a v1 document stays v1.
+Before the first production deployment, v1 may change in place under the [pre-production compatibility decision](../decisions/pre-production-compatibility.md). Such changes migrate known callers, tests, and documentation without compatibility shims solely for unreleased behavior. This does not rewrite stored publications or change an in-flight run's bound rules.
 
-There is no separate schema or execution version: the workflow format version selects the document validation and execution rules. Rostrum releases may add or retire format-version support, but they never change the semantics of a supported rule set.
+After the first production deployment, each supported version preserves its existing validation and execution semantics; breaking changes follow the rules below. Rostrum may add versions or end their execution support through the stated deprecation process. Recognition means using the named version's rules, not migrating to the newest version. A new format version never automatically rewrites an existing document.
 
 ### Field classification
 
@@ -205,32 +218,32 @@ Every v1 field has exactly one class. The classification is in force from v1 and
 | --- | --- |
 | `id` (top level) | identity — changing it changes which workflow the document is, not a versioning event |
 | `name`, `description` | metadata — display-only; cannot affect any run |
-| `workflowFormatVersion` | version selector — chooses the frozen rule set |
+| `workflowFormatVersion` | version selector — chooses the named rule set |
 | `firstNode`, `inputs`, `steps`, `conditionals` | operational |
 | Step fields (`id`, `type`, `config`, `inputs`, `outputs`, `successors`, `dependencies`, `conditional`, `loop`) | operational — step `id` is identity within the document; duplicates are validation errors |
 | Branch and default `label` | operational-by-default — display-only in effect, but part of routing inspection |
 
-A **metadata change** is an edit touching only metadata-class fields. An **operational change** is any other edit. Step-type `config` fields are classified by each registry entry when it ships; the base-shape classes above are fixed.
+A **metadata change** is an edit touching only metadata-class fields. An **operational change** is any other edit. Step-type `config` fields are classified by each registry entry when it ships; changes to these classifications or the base-shape classes follow the breaking-change rules below.
 
 ### Breaking and additive changes
 
-A change that makes a previously valid v1 document invalid requires a new format version (`"v2"`, `"v3"`, …). Breaking changes are:
+Before the first production deployment, breaking changes may update v1 in place under the [pre-production compatibility decision](../decisions/pre-production-compatibility.md). After that deployment, they require a new format version (`"v2"`, `"v3"`, …), or a new type name for a step-type-specific change. Breaking changes are:
 
 1. a rule-set change that makes a previously valid v1 document invalid;
-2. a step-type `config` schema change that invalidates a previously valid `config` — bump or new type name;
+2. a step-type `config` schema change that invalidates a previously valid `config`;
 3. removal of a step type from the registry;
-4. reinterpretation of an existing construct that changes execution behavior for identical documents — it must ship as a new version's rule set, and the frozen v1 rule set is never mutated;
+4. reinterpretation of an existing construct that changes execution behavior for identical documents;
 5. a change to the normalization or digest contract that breaks reproduction of stored digests.
 
-Additive changes stay within `v1` and never bump the format version: a new optional top-level field, a new step type, relaxed validation or a relaxed `config` schema, a new conditional operator, a relaxed DAG rule. An additive change is allowed only if every previously valid v1 document remains valid.
+Additive changes may stay within `v1`: a new optional top-level field, a new step type, relaxed validation or a relaxed `config` schema, a new conditional operator, or a relaxed DAG rule. A change is additive only if every previously valid v1 document remains valid and retains its execution behavior; otherwise it is breaking.
 
 Shipping a new format version moves no documents. An author migrates by editing `workflowFormatVersion` in a draft, resolving blocking findings, and publishing. Deprecating a step type keeps it registered and documented; removal is breaking.
 
 ### Runtime impact
 
-- **Bind-on-start.** A run executes the exact publication it was started against, to completion, with that version's rule set. Later publishes, format versions, or deprecations never alter an in-flight run.
-- **Future invocations.** The version named at invocation determines behavior. New invocations change only when an author republishes with a new `workflowFormatVersion`, or when a format version is deprecated.
-- **Deprecation windows.** The platform may announce an end-of-life (EOL) date for a format version. Before EOL the version remains fully supported. At EOL, new invocations of that version are refused with a documented error; in-flight runs continue; drafts and validation of that version's documents remain available. Authoring never breaks, only new execution.
+- **Bind-on-start.** A run executes the exact publication it was started against, to completion, with the selected rule set bound at start. Later publishes, rule-set changes, format versions, or deprecations never alter an in-flight run, including before production.
+- **Future invocations.** Before production, an in-place rule-set change may change how an existing publication executes or whether it is supported; its stored content remains unchanged. An author may need to revise and republish without changing `workflowFormatVersion`. After production, existing publications retain their version's semantics until execution support ends; adopting a breaking change requires revising and republishing under a new format version or step-type name, as applicable.
+- **Deprecation windows.** The platform may announce an end-of-life (EOL) date for a format version. Before EOL the version remains fully supported. At EOL, new invocations of that version are refused with a documented error; in-flight runs continue; drafts and validation of that version's documents remain available. EOL affects new execution, not authoring. The separate pre-production allowance can change authoring and validation rules in place.
 - **No in-flight auto-upgrade in v1.** Any future mechanism must be additive to bind-on-start — opt-in per run or per workflow — never a silent switch of a started run's version.
 
 ### Metadata-only changes
@@ -312,21 +325,38 @@ Validation starts from raw text and runs an eight-stage pipeline in a fixed orde
 | 1. Format version | `workflowFormatVersion` is present and equals `"v1"` (exact match) | Parse |
 | 2. Document shape | Required fields, types, UUID v7 formats, `additionalProperties: false`, array bounds, `maxIterations >= 1`. Enforced by the schema emitted from [`packages/workflow/src/schema.ts`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/src/schema.ts). Unknown fields are reported here | Format version |
 | 3. Identity and references | Step and conditional ids unique; `firstNode`, `successors`, `dependencies`, `loop.body`, `branches[].next`, `default.next` reference existing steps; `type` in the registry; mutual exclusions (`successors` xor `conditional`; `loop` xor `conditional`) | Shape |
-| 4. Graph topology | Acyclic (top level and loop bodies); no nested loops; `maxIterations` a positive integer; dependency reachability | Identity |
+| 4. Graph topology | Acyclic (top level and loop bodies); no direct self-dependency; no nested loops; `maxIterations` a positive integer; dependency reachability | Identity |
 | 5. Conditional semantics | Branch and default present; every condition-referenced step listed in `dependencies`; operators from the allowed set; leaf refs well-formed | Identity, Graph |
 | 6. Path and termination | Every reachable path ends at a terminal `result` step or an end-workflow branch; terminal steps outside loop bodies typed `result` | Graph, Conditional |
 | 7. Data references | Every `{ "ref": "..." }` syntactically valid and resolvable to a declared input, an upstream step output, or an in-scope loop variable | Identity, Graph |
-| 8. Input and output compatibility | Existence and ordering checks from stage 7; type-level compatibility advisory only in v1 | Data references |
+| 8. Input and output compatibility | Task operations exist and their `config` is valid; declared input and output schemas are valid JSON Schema 2020-12; required arguments are bound and no undeclared ones are; every binding's producer provably fits its consumer. See [Input and output compatibility](#input-and-output-compatibility) | Data references |
 
 ### Findings
 
 Each finding carries: `code` (a stable dot-namespaced identifier such as `workflow.graph.cycle` — the contract; message text is not), `message` (human-readable), `blocking` (whether it prevents publication), `path` (JSON Pointer, RFC 6901), `line` and `column` (from the source map when text is available), `relatedLocations` (additional pointers for cross-reference conflicts), and `details` (structured context for automated repair).
 
-All findings are blocking in v1 except advisory input/output type mismatches.
+All findings are blocking in v1.
 
 ### Input and output compatibility
 
-v1 checks that each reference resolves to a declared input or output and that the producing step completes before the consuming step. It does not compare the producer's and consumer's JSON Schema fragments beyond that existence check. A runtime may still fail when a step produces a value whose shape does not satisfy the consumer; static compatibility is intentionally limited in v1. A future format version may add a blocking type-compatibility check.
+v1 checks that each reference resolves to a declared input or output and that the producing step completes before the consuming step.
+
+A blocking static compatibility check is [approved for v1 in place](../decisions/pre-production-compatibility.md#boundaries-and-consequences). It is not yet recorded here as implemented or verified; [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) owns that work. It checks, before any run, every constraint JSON Schema can express on a value known at publication. Under it, validation reports these blocking findings:
+
+- `workflow.operation.unknown` when a task's `config.operation` isn't in the operation catalog of the validating release;
+- `workflow.operation.invalid-config` when the rest of a task's `config` doesn't satisfy that operation's configuration schema;
+- `workflow.io.invalid-schema` for each declared workflow input or step output schema that is not a valid JSON Schema 2020-12 schema;
+- `workflow.io.invalid-default` for each declared default, on a workflow input or a catalog argument, that isn't valid against its schema;
+- `workflow.io.missing-argument` when a task doesn't bind an argument its operation declares without a default, and `workflow.io.undeclared-argument` when it binds one the operation doesn't declare;
+- `workflow.io.undeclared-output` when a step declares an output its operation's output schema doesn't require;
+- `workflow.io.type-mismatch` when a producer isn't contained in its consumer: some value the producer allows is rejected by the consumer;
+- `workflow.io.unprovable` when containment can't be decided, naming the keyword responsible;
+- `workflow.condition.operand-mismatch` when a condition leaf's referenced value isn't provably suited to its operator: `gt`, `gte`, `lt`, and `lte` need a number and a number `value`; `contains` needs a string with a string `value`, or an array; `in` and `notin` need an array `value`; and for `eq`, `neq`, `in`, and `notin` the comparison value, or at least one of its elements, must be allowed by the referenced schema.
+
+A task's consumer schema is its operation's declared schema for the bound argument; a `result` step has no consumer schema. A producer is a literal, a workflow input's declared schema, or the operation's output schema for a referenced step output, which must also be contained in that step's declared output schema. A loop variable's producer is the `items` schema of its collection's producer.
+A literal is validated against its consumer's full schema. For schema producers, containment is decided keyword by keyword over `type` (with `integer` contained in `number`), `const`, `enum`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, identical `pattern`, `items`, `prefixItems`, `minItems`, `maxItems`, `properties`, `required`, `additionalProperties`, `minProperties`, `maxProperties`, `allOf`, `anyOf`, and local non-recursive `$ref`. Annotation keywords, including `format`, are ignored. Any other consumer keyword makes the binding unprovable. Producer keywords outside the set are ignored, which can only refuse a binding, never pass one that can fail.
+
+The executing runtime repeats the check with its own catalog before it accepts a run, and still checks every actual value at run time.
 
 ## Examples
 
@@ -344,7 +374,7 @@ Binds a name, produces a greeting, returns it. (`tests/fixtures/valid/sequential
   "description": "Bind a name, produce a greeting, return it.",
   "firstNode": "0192b0a0-7e1d-7000-8000-000000000002",
   "inputs": {
-    "name": { "type": "string" }
+    "name": { "schema": { "type": "string" } }
   },
   "steps": [
     {
