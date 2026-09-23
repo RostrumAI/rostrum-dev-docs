@@ -142,12 +142,12 @@ A refusal reports every failure it finds, sanitized and located with JSON Pointe
 
 Status: proposed.
 
-Authors describe the values a workflow accepts using JSON Schema. In the existing `sequential.json` fixture, the workflow input `inputs.name` is declared as `{"type":"string"}`, and the task output `outputs.greeting` has the same schema. These declarations say which values are allowed. They are not the values themselves. Step `inputs` are different again: they hold the literals or references that supply an operation's arguments.
+Authors describe the values a workflow accepts using JSON Schema. In the existing `sequential.json` fixture, the workflow input `inputs.name` is declared as `{"schema":{"type":"string"}}`, and the task output `outputs.greeting` has the same schema. These declarations say which values are allowed. They are not the values themselves. Step `inputs` are different again: they hold the literals or references that supply an operation's arguments.
 
 The daemon checks values against these declarations at three points:
 
-- Before accepting a run, it checks the invocation values against the workflow's input schemas.
-- Before dispatching a task, it checks the task's arguments against the operation's own input schema.
+- Before accepting a run, it fills in the declared default for each omitted optional workflow input, then checks the invocation values against the workflow's input schemas.
+- Before dispatching a task, it fills in the declared default for each unbound optional argument, then checks every argument against the operation's schema for it.
 - When a task returns, it checks the output against the operation's output schema and the step's declared output schemas before any later step can use it.
 
 A declaration such as `{"type":"number"}` has to reject a string amount, not convert it.
@@ -225,17 +225,17 @@ Status: owner direction (2026-09-20, [review comment](https://github.com/Rostrum
 
 The engine owns a map of runs. Each run owns its inputs and a `Map<nodeId, VisitState>`. Nodes can read this run context but can't change either map; their returned decisions tell the engine which change to make. A second entry in the map means a second visit was reached, not a newer version of an earlier status.
 
-For this Epic, each reached step is visited once. Its `activation` is the empty list, so its run-local `nodeId` is just the published `stepId`. Lookups also include the run ID, so two runs of the same publication never share a visit. There's no need to hash a UUID just to use it as a key.
+For this Epic, each reached step is visited once. Its `metadata` is the empty list, so its run-local `nodeId` is just the published `stepId`. Lookups also include the run ID, so two runs of the same publication never share a visit. There's no need to hash a UUID just to use it as a key.
 
 Building a visit's identity is the job of node creation. We aren't implementing loops or retries now, but the identity scheme must not rule them out later:
 
-- A future loop must include the loop step and the iteration in the activation identity, because two loops can share the same body definition.
-- Every predecessor that asks for the same target activation must get the same identity. Which predecessor asked, or in what order they arrived, must not be part of it.
+- A future loop must include the loop step and the iteration in the visit's metadata, because two loops can share the same body definition.
+- Every predecessor that asks for the same target step and metadata must get the same identity. Which predecessor asked, or in what order they arrived, must not be part of it.
 - Attempts and `workId` are kept separate from visit identity.
 
-So the activation has a concrete shape now, even though Epic 2 only uses its empty value. `createVisit(target, activation)` receives the target step and an activation: an ordered list of frames such as `{ loopStepId, iteration }`, outermost first. A predecessor passes its own activation along, and a future loop node adds or replaces its frame when it starts an iteration. The visit key is the step ID plus a canonical encoding of the frames. `VisitState` keeps the activation so later bindings can resolve loop variables from it. Frames hold only identity; attempt counts and work IDs never go in them.
+So the visit **metadata** has a concrete shape now, even though Epic 2 only uses its empty value. It records which loop iterations a visit sits inside, and it's part of the visit's identity. `createVisit(target, metadata)` receives the target step and its metadata: an ordered list of frames such as `{ loopStepId, iteration }`, outermost first. A predecessor passes its own metadata along, and a future loop node adds or replaces its frame when it starts an iteration. The visit key is the step ID plus a canonical encoding of the frames. `VisitState` keeps the metadata so later bindings can resolve loop variables from it. Frames hold only identity; attempt counts and work IDs never go in them.
 
-Each `VisitState` is a plain object with the identity, step ID, activation, status, creation time, and fields specific to that state. As work progresses, the engine replaces the object under the same key: waiting, then ready, then running, then a terminal state. A running visit has a work ID and start time. A completed visit has a completion time and its validated output. A failed visit has a completion time, a located failure, and a start time only if execution actually started. Earlier versions aren't kept; there's no append-only history. Because each state is its own shape, output can never show up on failed or unfinished work. There is no database row or event log in this Epic.
+Each `VisitState` is a plain object with the identity, step ID, metadata, status, creation time, and fields specific to that state. As work progresses, the engine replaces the object under the same key: waiting, then ready, then running, then a terminal state. A running visit has a work ID and start time. A completed visit has a completion time and its validated output. A failed visit has a completion time, a located failure, and a start time only if execution actually started. Earlier versions aren't kept; there's no append-only history. Because each state is its own shape, output can never show up on failed or unfinished work. There is no database row or event log in this Epic.
 
 ```mermaid
 stateDiagram-v2
@@ -323,9 +323,9 @@ Node classes supply the step-specific decisions:
 
 - `ExecutionNode.createVisit` gives the target identity and the initial waiting state.
 - `prepareExecution` resolves and validates inputs and returns one of: task work, a local result candidate, or a located failure.
-- `completeExecution` takes an accepted output and returns either the successor activations or the run's final result.
+- `completeExecution` takes an accepted output and returns either the successor visits to create (each a target step and its metadata) or the run's final result.
 
-The engine applies all these decisions through the same transition path, whatever the node type. `TaskExecutionNode` returns the task's successors once its output is committed. `ResultExecutionNode` returns its resolved input object as the final result and creates no successor. Neither class dispatches work or writes visit state. Future conditionals and loops can change which activations come back without adding a second scheduler. Those constructs are fields on workflow steps in v1, not new step type names to invent here.
+The engine applies all these decisions through the same transition path, whatever the node type. `TaskExecutionNode` returns the task's successors once its output is committed. `ResultExecutionNode` returns its resolved input object as the final result and creates no successor. Neither class dispatches work or writes visit state. Future conditionals and loops can change which successor visits come back without adding a second scheduler. Those constructs are fields on workflow steps in v1, not new step type names to invent here.
 
 The engine's main loop is `advanceWorkflow(runId)`. It's a synchronous pass that never awaits a handler or runs one inline:
 
@@ -370,7 +370,7 @@ sequenceDiagram
     X-->>E: TaskWorkResult (runId, workId, output or failure)
     E->>E: match runId and workId, validate and commit the output
     E->>N: completeExecution(visit, output)
-    N-->>E: successor activations or final result
+    N-->>E: successor visits or final result
     E->>E: schedule advanceWorkflow(runId)
 ```
 
@@ -382,12 +382,12 @@ Status: proposed.
 
 The executor receives a work item with the run, work, and step IDs, the workflow format version, the validated operation configuration, and the fully resolved input object. Its abort signal comes from the daemon's ownership of the run, not from the invoking request. It returns a success or failure result identified by run ID and work ID.
 
-Each operation has a declaration and an implementation. The declaration holds its name, configuration schema, input and output schemas, and the failure codes it can return. It lives in `@rostrum/workflow`, so publication validation and preparation read the same catalog ([D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation)). The implementation has its own daemon module and is paired with its declaration in a small static registry that the local executor uses. The executor looks up an operation and calls it; it doesn't collect every operation's logic in one file. This Epic provides three operations:
+Each operation has a declaration and an implementation. The declaration holds its name, configuration schema, its arguments (each a schema plus an optional default, the same shape as a workflow input), its output schema, and the failure codes it can return. It lives in `@rostrum/workflow`, so publication validation and preparation read the same catalog ([D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation)). The implementation has its own daemon module and is paired with its declaration in a small static registry that the local executor uses. The executor looks up an operation and calls it; it doesn't collect every operation's logic in one file. This Epic provides three operations:
 
 | Operation | Behavior | Expected failure |
 | --- | --- | --- |
 | `greet` | Takes a string `name` and returns `greeting` containing `Hello, <name>!`. | Invalid inputs are refused before dispatch. |
-| `add` | Adds finite `left` and an optional finite `right` (missing `right` means zero). Returns `value`. | A non-finite result is `numeric_overflow`. |
+| `add` | Adds finite `left` and finite `right`. `right` is optional, with a declared default of `0`. Returns `value`. | A non-finite result is `numeric_overflow`. |
 | `divide` | Divides finite `dividend` by finite `divisor`. Returns `value`. | Dividing by zero (either sign) is `division_by_zero`; a non-finite result is `numeric_overflow`. |
 
 The operations use ordinary JSON-number arithmetic, with no coercion and no decimal-money guarantees.
@@ -396,7 +396,7 @@ The operation contract is asynchronous. An implementation receives its validated
 
 If an operation throws or rejects unexpectedly, the executor turns that into a sanitized `task_error`. The engine also watches every executor promise for rejection, so a bug in the executor can't leave a run stuck.
 
-Bindings use the prepared bindings instead of parsing reference strings again. Literal values already belong to the prepared definition, and workflow inputs belong to the run. A reference to a step output resolves only against a completed visit and its committed output members. Author-chosen key names need careful lookups; see [Carried over from PR #64](#carried-over-from-pr-64). An explicit reference that doesn't resolve is a failure, even if the operation's matching argument is optional. Leaving out an optional binding is a different case and is allowed. Schema defaults never supply values.
+Bindings use the prepared bindings instead of parsing reference strings again. Literal values already belong to the prepared definition, and workflow inputs belong to the run. A reference to a step output resolves only against a completed visit and its committed output members. Author-chosen key names need careful lookups; see [Carried over from PR #64](#carried-over-from-pr-64). An argument with a declared default is optional: when a task leaves it unbound, the executor receives the default, so an implementation always gets every argument. Optional means the value may be left out, not that a dependency may be. An explicit reference is never replaced by the default, and a reference that doesn't resolve is a failure. JSON Schema's own `default` keyword stays an annotation and never supplies a value.
 
 When work finishes, the result goes back to the engine, not to a node that looks up global state:
 
@@ -421,7 +421,7 @@ Status: proposed.
 
 Dead-run and timeout causes are reported through `ExecutionFailure.code`, next to the run status and `stopping` flag, rather than through a separate, loosely related substatus field.
 
-The new shared `ExecutionFailure` shape has a code, a message, a JSON Pointer path, and a step ID when a step is responsible. The codes are `self_dependency`, `unmet_dependencies`, `missing_result`, `task_timeout`, `execution_error`, `task_error`, `numeric_overflow`, `division_by_zero`, and the static-check codes below. Preparation uses `self_dependency` and the static-check codes from [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation): `unknown_operation`, `invalid_config`, `invalid_schema`, `missing_argument`, `undeclared_argument`, `undeclared_output`, `io_type_mismatch`, and `io_unprovable`; the others describe failures in accepted runs. Dependency paths point into the publication. Operation errors point into the operation's input or output. Timeouts and engine-wide errors use the empty pointer when there's no narrower location. Messages are sanitized.
+The new shared `ExecutionFailure` shape has a code, a message, a JSON Pointer path, and a step ID when a step is responsible. The codes are `self_dependency`, `unmet_dependencies`, `missing_result`, `task_timeout`, `execution_error`, `task_error`, `numeric_overflow`, `division_by_zero`, and the static-check codes below. Preparation uses `self_dependency` and the static-check codes from [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation): `unknown_operation`, `invalid_config`, `invalid_schema`, `invalid_default`, `missing_argument`, `undeclared_argument`, `undeclared_output`, `io_type_mismatch`, and `io_unprovable`; the others describe failures in accepted runs. Dependency paths point into the publication. Operation errors point into the operation's input or output. Timeouts and engine-wide errors use the empty pointer when there's no narrower location. Messages are sanitized.
 
 All failure codes are declared in one catalog in `packages/workflow/src/execution.ts`, including codes only one operation returns, such as `division_by_zero`. Operation declarations list which of these codes they can return instead of defining their own, so the errors of every node and operation type are found in one file.
 
@@ -433,7 +433,7 @@ Before the first production deployment, we propose needed breaking changes and u
 
 ### D12 — Static input/output compatibility is shared by publication and preparation
 
-Status: owner decision (2026-09-22; extended on 2026-09-23 to every constraint JSON Schema can express, with unknown operations and invalid configuration rejected at publication). This changes v1 in place under [D11](#d11--breaking-changes-are-allowed-before-production). The [v1 specification](../specifications/workflow-interface-v1.md#input-and-output-compatibility) has been amended; the validator code hasn't been changed yet.
+Status: owner decision (2026-09-22; extended on 2026-09-23 to every constraint JSON Schema can express, with unknown operations and invalid configuration rejected at publication, declared defaults for optional inputs, and condition operand checks). This changes v1 in place under [D11](#d11--breaking-changes-are-allowed-before-production). The [v1 specification](../specifications/workflow-interface-v1.md#input-and-output-compatibility) has been amended; the validator code hasn't been changed yet.
 
 Today nothing checks, before a run, whether the value a binding supplies can match what its consumer needs. Say a `divide` step feeds an `add` step, but the `divide` step declares its `value` output as `{"type":"string"}`. That document publishes, and the run only fails when the step executes. Stage 8 of publication validation exists for this kind of check, but it emits nothing in v1. Publication also accepts any operation name and any `config`.
 
@@ -451,18 +451,20 @@ The check covers:
 | Operation | A task's `config.operation` names an operation in the catalog. | `workflow.operation.unknown` / `unknown_operation` |
 | Configuration | The rest of the task's `config` is valid against that operation's configuration schema. `config` is literal, so this is an ordinary Ajv validation and is complete. | `workflow.operation.invalid-config` / `invalid_config` |
 | Declared schemas | Every workflow input and step output declaration is a valid JSON Schema 2020-12 schema ([D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv)). | `workflow.io.invalid-schema` / `invalid_schema` |
-| Arguments | A task binds every argument its operation's input schema requires, and nothing that schema doesn't allow. | `workflow.io.missing-argument` / `missing_argument`, `workflow.io.undeclared-argument` / `undeclared_argument` |
+| Defaults | Every declared default, on a workflow input or a catalog argument, is valid against its own schema. | `workflow.io.invalid-default` / `invalid_default` |
+| Arguments | A task binds every argument its operation declares without a default, and nothing the operation doesn't declare. | `workflow.io.missing-argument` / `missing_argument`, `workflow.io.undeclared-argument` / `undeclared_argument` |
 | Declared outputs | Each output a step declares is a member its operation's output schema requires, so a reference to it always resolves, and every value the operation can return for it fits the declaration. | `workflow.io.undeclared-output` / `undeclared_output`, or a mismatch below |
 | Bindings | Every value a producer can supply is accepted by its consumer. | `workflow.io.type-mismatch` / `io_type_mismatch` |
 | Unprovable bindings | A binding the check can't prove is blocked, not deferred to the runtime. | `workflow.io.unprovable` / `io_unprovable` |
+| Condition operands | Each condition leaf's referenced value provably suits its operator, and its comparison value fits (see below). | `workflow.condition.operand-mismatch`, or `workflow.io.unprovable` |
 
 **Producers and consumers.** A binding's consumer is the operation's input schema for that argument; result steps have no consumer, so anything fits. Its producer is one of:
 
 - a literal, which is validated against the consumer's full schema with Ajv, so every keyword is enforced;
-- a workflow input, described by its declaration (every declared workflow input is required at invocation, so the reference always resolves);
+- a workflow input, described by its declared schema. An optional input's default is valid against that schema, so the reference always resolves to a value the schema allows;
 - a step output, described by the operation's output schema for that member, which the declarations rule guarantees fits inside the step's own declaration.
 
-The task's bound arguments are also checked together, as one object whose properties are the producers and whose required members are the bound names. That object must fit the operation's whole input schema, so object-level constraints such as `minProperties` apply too.
+**Condition operands.** Conditionals aren't executed in this Epic, but publication validates them, so their leaves get the same must-always-fit treatment. The producer is the referenced value's schema. `gt`, `gte`, `lt`, and `lte` need it contained in `number`, with a number `value`. `contains` needs it contained in `string`, with a string `value`, or in `array`. `in` and `notin` need an array `value`. `eq`, `neq`, `in`, and `notin` also need the comparison value, or at least one element of it, to be allowed by the producer's schema, since otherwise the condition's outcome is fixed. `truthy` and `falsy` accept anything.
 
 **Must always fit.** A binding passes only when the producer's schema is contained in the consumer's: every value the producer allows, the consumer accepts. Overlap isn't enough. A workflow input declared `{"type":"number"}` bound to an argument that requires `{"type":"number","minimum":0}` is blocked, because `-1` passes the first and fails the second. The author fixes it by declaring the input with `"minimum": 0` or tighter. `integer` counts as contained in `number`.
 
@@ -656,7 +658,9 @@ The implementing engineer owns each checkpoint and records its pull request and 
 
 **Owner and review:** the implementing engineer. API and specification reviewers check refusal reasons and locations, the shared inspection schemas, and the v1 changes. This review doesn't reopen the owner's `completed` or pre-production decisions.
 
-**Verification:** keep the digest-vector tests. Add graph-stage tests for reachable and unreachable self-dependency. Add stage 8 tests for every rule in D12, including unprovable bindings. Test preparation refusals, literal-key bindings, declared-schema checking, and complete refusal lists. Preparing the [worked example](#worked-example) directly, with no HTTP or Postgres, resolves its bindings and refuses a string amount, a missing input, an undeclared input, and an unknown operation, each with its own reason and location. `bun run check` and `bun test` pass. No schema-enum snapshot or JSON-guard suite is needed.
+Change workflow input declarations to `{ schema, default? }` in the document schema, and migrate the fixtures that declare inputs. Their digests change, so regenerate the affected digest vectors.
+
+**Verification:** keep the digest-vector tests, with the regenerated vectors. Add graph-stage tests for reachable and unreachable self-dependency. Add stage 8 tests for every rule in D12, including unprovable bindings. Test preparation refusals, literal-key bindings, declared-schema checking, and complete refusal lists. Preparing the [worked example](#worked-example) directly, with no HTTP or Postgres, resolves its bindings and refuses a string amount, a missing input, an undeclared input, and an unknown operation, each with its own reason and location. `bun run check` and `bun test` pass. No schema-enum snapshot or JSON-guard suite is needed.
 
 **Recovery and handoff:** nothing in production uses the vocabulary yet. Revert the workflow-package and daemon changes together so no consumer is left on a half-published contract.
 
@@ -702,9 +706,10 @@ These are the procedures for accepting the implementation. None of them have bee
 
 ### Worked example
 
-The new calculation fixture has three required workflow inputs: `amount`, `surcharge`, and `people`. It adds `amount` and `surcharge`, divides the sum by `people`, and returns `total` and `perPerson` through an explicit result step. The task steps bind to the original workflow inputs and the validated addition output; the result step binds to both task outputs.
+The new calculation fixture has two required workflow inputs, `amount` and `people`, and an optional `surcharge` with a default of `0`. It adds `amount` and `surcharge`, divides the sum by `people`, and returns `total` and `perPerson` through an explicit result step. The task steps bind to the original workflow inputs and the validated addition output; the result step binds to both task outputs.
 
 - With amount 90, surcharge 10, and people 4, the result is total 100 and perPerson 25.
+- With amount 90 and people 4 and no surcharge, the default applies: total 90 and perPerson 22.5.
 - With people 0, invocation succeeds but the division fails. The addition output stays inspectable, the result step never runs, and there is no final output.
 - A string amount, a missing input, or an undeclared input is refused before any run or task exists.
 - Reordering the fixture's step array doesn't change either outcome.
@@ -716,11 +721,11 @@ Also reuse `minimum.json` for an empty result and `sequential.json` for the gree
 | Location | Setup and what we should see |
 | --- | --- |
 | New `packages/workflow/src/execution.test.ts` | Waiting snapshots identify unmet dependencies. Stopping snapshots include failures and outstanding work. A terminal failure can't carry a successful output or active work. No tests that only pin enum lists or wording. |
-| New daemon preparation and input/output-schema tests | A number declaration rejects a string without coercing it. Malformed schemas and unresolved external references are refused before admission. Valid local references work. `format` annotations don't reject values. Literal prototype-sensitive and dotted names keep their values. An omitted optional input behaves differently from null and from an unresolved explicit binding. A refusal lists every failure found, not just the first. |
+| New daemon preparation and input/output-schema tests | A number declaration rejects a string without coercing it. Malformed schemas and unresolved external references are refused before admission. Valid local references work. `format` annotations don't reject values. Literal prototype-sensitive and dotted names keep their values. An omitted optional input or unbound optional argument receives its declared default; an explicit `null` doesn't, and an unresolved explicit reference fails rather than falling back to the default. A refusal lists every failure found, not just the first. |
 | New `execution/workflow-engine.test.ts` | Reverse the declared step order; repeat advancement, queue delivery, and completion; return an immediately resolved result. Each reached task runs once, each successor sees only committed output, and wrong-run or stale results can't corrupt another visit. |
 | The same engine suite, with controlled visit states and executors | Create one visit whose dependencies aren't all completed, then satisfy them and see exactly one dispatch. No outstanding work plus unmet dependencies fails with a location. No continuation and no result fails with a different code. A pending disconnected step doesn't fail a successful run. These internal cases don't enable parallel invocation. |
 | The same engine suite, with controlled settlement and clock | Hold one run while a second completes or fails; their inputs and outcomes stay separate. A task deadline stops new work, stays stopping until the task actually settles, and ignores late output. Terminal state doesn't change on repeated delivery or inspection. |
-| New tests next to `compatibility.ts` and the stage 8 suite | Each row of the D12 table produces its finding with a location: an unknown operation, invalid `config`, an invalid declaration, a missing and an undeclared argument, an undeclared output, a `divide` step declaring `value` as a string, and a string literal bound to `add`'s `left`. A `{"type":"number"}` input bound to a `minimum: 0` argument is a mismatch; the same input declared with `minimum: 1` passes, as does `integer` into `number`. A consumer using `not`, or a differing `pattern`, is unprovable. A producer using `not` against a plain consumer passes. Every catalog schema uses only the comparable set. Preparation reports each finding as its failure code. |
+| New tests next to `compatibility.ts` and the stage 8 suite | Each row of the D12 table produces its finding with a location: an unknown operation, invalid `config`, an invalid declaration, an invalid default, a missing and an undeclared argument, a `gt` on a string output, an undeclared output, a `divide` step declaring `value` as a string, and a string literal bound to `add`'s `left`. A `{"type":"number"}` input bound to a `minimum: 0` argument is a mismatch; the same input declared with `minimum: 1` passes, as does `integer` into `number`. A consumer using `not`, or a differing `pattern`, is unprovable. A producer using `not` against a plain consumer passes. Every catalog schema uses only the comparable set. Preparation reports each finding as its failure code. |
 | New tests next to the operation modules | Divide by zero and negative zero, and trigger arithmetic overflow, through the local executor. Check for the specific domain failure, not just that a promise resolves. |
 | New engine and snapshot checks | Return an operation output with the wrong type, a missing required member, or a non-finite number; no invalid output reaches a successor. Mutating a returned object can't change committed output. |
 | New run-service and controller or client tests next to those modules | Cover every HTTP outcome in the table. Malformed and wrong-identity upstream responses fail safely. POST is never retried. Both services accept and refuse the same invocation envelopes. Authoring's existing decoder and error shapes still work. Race cancellation against admission with a delayed publication lookup, and check that no late run appears. |
@@ -758,7 +763,7 @@ After implementation, record command output, pull-request links, review outcomes
 
 - [x] Re-baseline this design against `rostrum` `main` and the closed checkpoint-1 attempt (2026-09-19).
 - [x] Address the owner's review comments through 2026-09-19, including the compatibility decision and `completed` terminology (2026-09-20). The owner's review is still in progress.
-- [x] Address the owner's follow-up review questions: removed response caps, shared static compatibility, activation frames, the asynchronous operation contract, and diagrams (2026-09-22).
+- [x] Address the owner's follow-up review questions: removed response caps, shared static compatibility, visit metadata frames (then called activations), the asynchronous operation contract, and diagrams (2026-09-22).
 - [ ] Adopt and link the parent blueprint, then complete the reviews in [What still needs review](#what-still-needs-review). Stephen Pierre-Paul owns the handoff.
 - [ ] Checkpoint 1: execution contracts and preparation.
 - [ ] Checkpoint 2: direct daemon-local execution.

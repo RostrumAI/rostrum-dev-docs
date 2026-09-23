@@ -39,11 +39,22 @@ Those Epics own resolving the execution semantics and any change to the rules be
 | `name` | string | **required** | Workflow name. Display-only; see [Field classification](#field-classification). |
 | `description` | string | optional | Workflow description. Display-only. Defaults to absent. |
 | `firstNode` | string (UUID v7) | **required** | The `id` of the step where execution begins. |
-| `inputs` | object | optional | Workflow inputs. Each key is an input name; each value is a JSON Schema 2020-12 fragment describing the accepted value. Defaults to `{}`. |
+| `inputs` | object | optional | Workflow inputs. Each key is an input name; each value is an [input declaration](#input-declarations). Defaults to `{}`. |
 | `steps` | array | **required** | Unordered list of step objects. Minimum length 1. Execution order follows the graph topology, never array order; the visual editor determines display order. |
 | `conditionals` | array | optional | List of conditional objects used for evaluated routing. Defaults to `[]`. See [Conditionals](#conditionals). |
 
 "Required" in the field tables means required for a valid, publishable document. Drafts are held to a lower bar on purpose: any syntactically valid JSON saves as a draft, and a fresh workflow missing `firstNode` or `steps` saves with those missing-field findings attached (see [Saving a draft](#saving-a-draft)). The schema rules below therefore describe the publishable end state, not what the editor must show at every moment.
+
+### Input declarations
+
+A workflow input is declared as an object with these fields, and no others:
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `schema` | object or boolean | **required** | A JSON Schema 2020-12 schema describing the accepted value. |
+| `default` | any JSON value | optional | Makes the input optional. When an invocation omits the input, the run uses this value. It must be valid against `schema`. |
+
+An input without `default` is required. An explicit `null` is a supplied value, not an omission, so it never receives the default. JSON Schema's own `default` keyword inside `schema` is an annotation and never supplies a value. Operation arguments in the operation catalog are declared with the same shape: an argument without `default` must be bound, and an unbound argument with `default` receives it. Optional means the value may be omitted; an explicit reference is never replaced by the default and must still resolve.
 
 ### Step fields
 
@@ -335,13 +346,14 @@ A blocking static compatibility check is [approved for v1 in place](../decisions
 - `workflow.operation.unknown` when a task's `config.operation` isn't in the operation catalog of the validating release;
 - `workflow.operation.invalid-config` when the rest of a task's `config` doesn't satisfy that operation's configuration schema;
 - `workflow.io.invalid-schema` for each declared workflow input or step output schema that is not a valid JSON Schema 2020-12 schema;
-- `workflow.io.missing-argument` when a task doesn't bind an argument its operation's input schema requires, and `workflow.io.undeclared-argument` when it binds one that schema doesn't allow;
+- `workflow.io.invalid-default` for each declared default, on a workflow input or a catalog argument, that isn't valid against its schema;
+- `workflow.io.missing-argument` when a task doesn't bind an argument its operation declares without a default, and `workflow.io.undeclared-argument` when it binds one the operation doesn't declare;
 - `workflow.io.undeclared-output` when a step declares an output its operation's output schema doesn't require;
 - `workflow.io.type-mismatch` when a producer isn't contained in its consumer: some value the producer allows is rejected by the consumer;
-- `workflow.io.unprovable` when containment can't be decided, naming the keyword responsible.
+- `workflow.io.unprovable` when containment can't be decided, naming the keyword responsible;
+- `workflow.condition.operand-mismatch` when a condition leaf's referenced value isn't provably suited to its operator: `gt`, `gte`, `lt`, and `lte` need a number and a number `value`; `contains` needs a string with a string `value`, or an array; `in` and `notin` need an array `value`; and for `eq`, `neq`, `in`, and `notin` the comparison value, or at least one of its elements, must be allowed by the referenced schema.
 
-A task's consumer schema is its operation's input schema for the bound argument; a `result` step has no consumer schema. A producer is a literal, a workflow input's declared schema, or the operation's output schema for a referenced step output, which must also be contained in that step's declared output schema. A loop variable's producer is the `items` schema of its collection's producer. A task's bound arguments are also checked together as one object against the operation's whole input schema.
-
+A task's consumer schema is its operation's declared schema for the bound argument; a `result` step has no consumer schema. A producer is a literal, a workflow input's declared schema, or the operation's output schema for a referenced step output, which must also be contained in that step's declared output schema. A loop variable's producer is the `items` schema of its collection's producer.
 A literal is validated against its consumer's full schema. For schema producers, containment is decided keyword by keyword over `type` (with `integer` contained in `number`), `const`, `enum`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, identical `pattern`, `items`, `prefixItems`, `minItems`, `maxItems`, `properties`, `required`, `additionalProperties`, `minProperties`, `maxProperties`, `allOf`, `anyOf`, and local non-recursive `$ref`. Annotation keywords, including `format`, are ignored. Any other consumer keyword makes the binding unprovable. Producer keywords outside the set are ignored, which can only refuse a binding, never pass one that can fail.
 
 The executing runtime repeats the check with its own catalog before it accepts a run, and still checks every actual value at run time.
@@ -362,7 +374,7 @@ Binds a name, produces a greeting, returns it. (`tests/fixtures/valid/sequential
   "description": "Bind a name, produce a greeting, return it.",
   "firstNode": "0192b0a0-7e1d-7000-8000-000000000002",
   "inputs": {
-    "name": { "type": "string" }
+    "name": { "schema": { "type": "string" } }
   },
   "steps": [
     {

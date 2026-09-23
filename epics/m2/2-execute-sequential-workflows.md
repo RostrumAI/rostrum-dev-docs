@@ -43,7 +43,7 @@ The active-work list, `currentSteps`, shows ready and running steps rather than 
 ### Passing data and producing a result
 
 - Execute reached steps once, in the workflow's declared sequence. A dependent step cannot start until its required predecessors have completed successfully.
-- Let authors supply step inputs from literals, workflow inputs, and earlier successful step outputs. Missing required values or invalid data prevent the affected step from running. An optional input may be omitted, but an explicit reference must resolve.
+- Let authors supply step inputs from literals, workflow inputs, and earlier successful step outputs. Missing required values or invalid data prevent the affected step from running. An optional input has a declared default, used when it's left out; an explicit reference is never replaced by the default and must resolve.
 - Make step outputs available to later work only after the entire output has passed validation. Failed, incomplete, or not-yet-executed work cannot supply data.
 - Define the supported deterministic task capabilities and their input, output, and failure requirements. A handler performs one step's work; the daemon controls sequencing and workflow completion. The blueprint establishes the task-execution responsibilities and approach; the technical design selects the initial operation set and specifies handler interfaces.
 - Complete a sequential workflow through an explicit result step. Its resolved input values form the caller's final output. Reaching that step without resolving its data is a failure, not success.
