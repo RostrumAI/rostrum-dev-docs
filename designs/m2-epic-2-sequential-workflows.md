@@ -423,7 +423,7 @@ Dead-run and timeout causes are reported through `ExecutionFailure.code`, next t
 
 The new shared `ExecutionFailure` shape has a code, a message, a JSON Pointer path, and a step ID when a step is responsible. The codes are `self_dependency`, `unmet_dependencies`, `missing_result`, `task_timeout`, `execution_error`, `task_error`, `numeric_overflow`, `division_by_zero`, and the static-check codes below. Preparation uses `self_dependency` and the static-check codes from [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation): `unknown_operation`, `invalid_config`, `invalid_schema`, `invalid_default`, `missing_argument`, `undeclared_argument`, `undeclared_output`, `io_type_mismatch`, and `io_unprovable`; the others describe failures in accepted runs. Dependency paths point into the publication. Operation errors point into the operation's input or output. Timeouts and engine-wide errors use the empty pointer when there's no narrower location. Messages are sanitized.
 
-All failure codes are declared in one catalog in `packages/workflow/src/execution.ts`, including codes only one operation returns, such as `division_by_zero`. Operation declarations list which of these codes they can return instead of defining their own, so the errors of every node and operation type are found in one file.
+All failure codes are declared in one catalog in `packages/workflow/src/execution/schemas.ts`, including codes only one operation returns, such as `division_by_zero`. Operation declarations list which of these codes they can return instead of defining their own, so the errors of every node and operation type are found in one file.
 
 ### D11 — Breaking changes are allowed before production
 
@@ -546,7 +546,7 @@ These review findings from the closed attempt still apply:
 
 ## HTTP API
 
-Both applications get `controllers/runs/invoke.ts` and `controllers/runs/inspect.ts`, with route schemas and error mapping in the area's `schemas.ts` and `errors.ts`, following the existing controller pattern. Register them in `http/routes.ts`, add a `runs` tag to each application's tag list, and expose the injected run service through each process's service context. Controllers must not import repositories or construct services.
+Both applications get `controllers/runs/invoke.ts` and `controllers/runs/inspect.ts`, with the invocation request schema in `invoke.schema.ts` beside its route, and shared response shapes and error mapping in the area's `schemas.ts` and `errors.ts`, following the existing controller pattern. Register them in `http/routes.ts`, add a `runs` tag to each application's tag list, and expose the injected run service through each process's service context. Controllers must not import repositories or construct services.
 
 Both services expose `POST /api/runs` and `GET /api/runs/:runId`. Each application declares its own invocation request schema, because the two surfaces are owned separately (see [D9](#d9--share-the-run-vocabulary-not-the-invocation-api)). The request carries an exact workflow ID, a positive publication number, and optional object inputs, and allows no unknown envelope fields. A missing inputs object means empty inputs. Acceptance returns a relative `Location: /api/runs/<runId>`. Every run response sets `Cache-Control: no-store`; the daemon already does this for all responses, and the Control API's run controllers must add it. The daemon keeps its existing bearer authentication.
 
@@ -611,36 +611,107 @@ While the process is draining, new HTTP requests are refused, including GET insp
 
 ## Where the code goes
 
-The daemon's new modules live under `apis/daemon/src/services/runs/`. None of them exist on the inspected baseline.
+New code is grouped by concern, not collected under one `execution/` folder. Schemas follow the existing placement rule: a route-specific schema sits beside its controller as `<route>.schema.ts`, an area's shared schemas go in that area's `schemas.ts`, and an application-wide schema goes in `src/schemas.ts`. TypeBox schemas are only for data that crosses a boundary: HTTP, between services, or storage. Everything else is a plain TypeScript type declared in the module that owns it. There are no separate type files and no barrel modules.
 
-| New file | What it does |
+### Daemon
+
+```text
+apis/daemon/src/
+  schemas.ts                         daemon error envelope, including the run-refusal member
+  controllers/runs/
+    invoke.ts   invoke.schema.ts     POST /api/runs
+    inspect.ts                       GET /api/runs/:runId
+    schemas.ts  errors.ts            run response shapes and error mapping both routes share
+  services/runs/
+    run-service.ts
+    preparation/
+      publication-preparer.ts
+      prepared-workflow.ts
+      value-checks.ts
+    engine/
+      workflow-engine.ts
+      run-state.ts
+      bindings.ts
+      run-observation.ts
+      nodes/
+        execution-node.ts
+        task-execution-node.ts
+        result-execution-node.ts
+    tasks/
+      task-executor.ts
+      local-task-executor.ts
+      operations/
+        greet.ts  add.ts  divide.ts
+        operation-registry.ts
+```
+
+`preparation/`, `engine/`, and `tasks/` are three separate concerns, and each depends only on those before it. `tasks/` never imports `engine/`, which is the boundary a later remote worker needs. Operation implementations sit under `tasks/` because only the executor uses them.
+
+| File under `services/runs/` | What it does |
 | --- | --- |
 | `run-service.ts` | `RunService.invokeWorkflow` retrieves, prepares, and admits a run; `getRun` returns its current state or not-found. The daemon's run controllers call it. Startup injects the repository, preparer, engine, and the process's work registration. |
-| `execution/publication-preparer.ts` | `prepare(document, publication)` runs the capability checks, including the shared compatibility check, and builds the prepared workflow. `validateInputs(prepared, inputs)` checks one run's inputs. Reuses document schemas, reference helpers, and the operation catalog from `@rostrum/workflow`; doesn't call the publication validator. |
-| `execution/input-output-schemas.ts` | Uses the shared schema compiler to build value checks and maps its errors to located execution failures. No parser, JSON guard, or schema-rewriting framework. |
-| `execution/operations/greet.ts`, `add.ts`, `divide.ts` | One implementation per module, each typed against its declaration from `@rostrum/workflow`. |
-| `execution/operations/registry.ts` | Pairs each catalog declaration with its implementation in one static map, and receives any outside resources an implementation needs at startup. The local executor uses it. There's no dynamic plugin loader. |
-| `execution/task-executor.ts` | Declares `TaskWorkItem`, `TaskWorkResult`, and the executor interface. Contains no operation code. |
-| `execution/local-task-executor.ts` | Looks up the registered operation, calls it, and returns its identified result or a sanitized failure. Gets no engine, database, or HTTP context. |
-| `execution/bindings.ts` | Resolves prepared bindings against accepted inputs and completed visits. Operations receive resolved values, never references. |
-| `execution/run-state.ts` | Defines run state, the `VisitState` variants, and the allowed transitions. Only the engine writes them. |
-| `execution/execution-node.ts` | Holds `ExecutionNode`, `TaskExecutionNode`, and `ResultExecutionNode`. They're small, so they share a file; a later node type can get its own file when its behavior justifies it. |
-| `execution/workflow-engine.ts` | Owns accepted runs, advancement, ready notifications, claims, completion matching, deadlines, and lifecycle release. |
-| `execution/run-observation.ts` | Builds consistent inspection snapshots from run state. |
+| `preparation/publication-preparer.ts` | `prepare(document, publication)` runs the capability checks, including the shared static check, and builds the prepared workflow. `validateInputs(prepared, inputs)` fills in defaults and checks one run's inputs. Reuses document schemas, reference helpers, and the operation catalog from `@rostrum/workflow`; doesn't call the publication validator. |
+| `preparation/prepared-workflow.ts` | Declares the prepared workflow, its prepared steps, and prepared bindings. They're immutable and process-local, so they're plain types, not schemas. |
+| `preparation/value-checks.ts` | Uses the shared schema compiler to build value checks and maps its errors to located execution failures. No parser, JSON guard, or schema-rewriting framework. |
+| `engine/workflow-engine.ts` | Owns accepted runs, advancement, ready notifications, claims, completion matching, deadlines, and lifecycle release. |
+| `engine/run-state.ts` | Declares run state, the `VisitState` variants, and visit metadata, and defines the allowed transitions as pure functions. Only the engine applies them. |
+| `engine/bindings.ts` | Resolves prepared bindings against accepted inputs and completed visits. Operations receive resolved values, never references. |
+| `engine/run-observation.ts` | Builds consistent inspection snapshots from run state. |
+| `engine/nodes/execution-node.ts` | The `ExecutionNode` base class: `createVisit`, `prepareExecution`, and `completeExecution`. |
+| `engine/nodes/task-execution-node.ts`, `result-execution-node.ts` | One node type per module. Later conditional and loop nodes are added beside them. |
+| `tasks/task-executor.ts` | Declares `TaskWorkItem`, `TaskWorkResult`, and the executor interface. They stay in-process in this Epic, so they're plain types; a runtime schema waits for a real remote worker. Contains no operation code. |
+| `tasks/local-task-executor.ts` | Looks up the registered operation, calls it, and returns its identified result or a sanitized failure. Gets no engine, database, or HTTP context. |
+| `tasks/operations/greet.ts`, `add.ts`, `divide.ts` | One implementation per module, each typed against its declaration from `@rostrum/workflow`. |
+| `tasks/operations/operation-registry.ts` | Pairs each catalog declaration with its implementation in one static map, and receives any outside resources an implementation needs at startup. There's no dynamic plugin loader. |
 
-The Control API gets its own `services/runs/run-service.ts`. It calls the authenticated daemon client; it never builds an engine or queries publications. The [HTTP API](#http-api), [Limits and configuration](#limits-and-configuration), and [Shutdown](#shutdown) sections cover the controller, client, configuration, and process-factory changes in both applications.
+### Control API
 
-`packages/workflow/src/execution.ts`, exported through a new `@rostrum/workflow/execution` subpath, holds the shared statuses, failure and refusal vocabulary, and acceptance and inspection schemas. It contains no invocation request schema and no engine behavior. Export the existing UUID v7 pattern from `packages/workflow/src/schema.ts` for these declarations.
+```text
+apis/control-api/src/
+  controllers/runs/
+    invoke.ts   invoke.schema.ts
+    inspect.ts
+    schemas.ts  errors.ts
+  services/runs/
+    run-service.ts
+  clients/daemon.ts                  gains the invoke and inspect calls
+```
 
-The workflow package also gains the pieces both services run:
+`services/runs/run-service.ts` calls the authenticated daemon client; it never builds an engine or queries publications. The [HTTP API](#http-api), [Limits and configuration](#limits-and-configuration), and [Shutdown](#shutdown) sections cover the controller, client, configuration, and process-factory changes in both applications.
 
-| New or changed file | What it does |
+### Workflow package
+
+The package already groups its code into `parse/`, `publish/`, `rules/`, and `validation/`. The new code follows that:
+
+```text
+packages/workflow/src/
+  execution/
+    schemas.ts
+  operations/
+    greet.ts  add.ts  divide.ts
+    operation-catalog.ts
+  declared-schemas/
+    declared-schema-compiler.ts
+    schema-containment.ts
+  compatibility/
+    static-compatibility-check.ts
+    condition-operands.ts
+  validation/stages/
+    input-output-compatibility-stage.ts
+```
+
+| File under `packages/workflow/src/` | What it does |
 | --- | --- |
-| `packages/workflow/src/operations/greet.ts`, `add.ts`, `divide.ts` | One operation declaration per module: name, configuration schema, input and output schemas, and the failure codes it can return. No implementation. |
-| `packages/workflow/src/operations/catalog.ts` | Lists the declarations in one static catalog that publication validation and preparation both read. |
-| `packages/workflow/src/declared-schemas.ts` | Holds the configured Ajv compiler for author-declared schemas. Publication uses it to report invalid declarations; preparation uses it to build value checks. |
-| `packages/workflow/src/compatibility.ts` | The static compatibility check from [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation). It takes a document and a catalog and returns every located finding, using a per-keyword containment checker in the same module. |
-| `packages/workflow/src/validation/stages/input-output-compatibility-stage.ts` | Reports invalid declared schemas and the check's mismatches as blocking findings, registered in the existing findings catalog. |
+| `execution/schemas.ts` | The shared statuses, failure-code catalog, refusal vocabulary, and acceptance and inspection schemas, with their `Static` types. No invocation request schema and no engine behavior. The new `@rostrum/workflow/execution` subpath in `package.json` points straight at this file, with no barrel. |
+| `operations/greet.ts`, `add.ts`, `divide.ts` | One operation declaration per module: name, configuration schema, arguments (each a schema plus an optional default), output schema, and the failure codes it can return. No implementation. |
+| `operations/operation-catalog.ts` | Declares `OperationDeclaration` and lists the declarations in one static catalog that publication validation and preparation both read. |
+| `declared-schemas/declared-schema-compiler.ts` | The configured Ajv compiler for author-declared schemas ([D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv)). Publication uses it to report invalid declarations and defaults; preparation uses it to build value checks. |
+| `declared-schemas/schema-containment.ts` | Decides whether one schema is contained in another over the comparable keyword set, or reports the keyword that makes it unprovable. It knows nothing about workflows, and it's the hardest part of [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation), so it's tested on its own. |
+| `compatibility/static-compatibility-check.ts` | The D12 check. It takes a document and a catalog and returns every located finding. The daemon calls it directly, so it lives outside the publication pipeline. |
+| `compatibility/condition-operands.ts` | The condition-leaf operator rules from D12. |
+| `validation/stages/input-output-compatibility-stage.ts` | Stage 8: calls the static check and reports its results as blocking findings, registered in the existing findings catalog. |
+
+Export the existing UUID v7 pattern from `packages/workflow/src/schema.ts` for the execution schemas.
 
 Update `packages/workflow/package.json`, `apis/daemon/package.json`, and the lockfile together. `@rostrum/workflow` adds `ajv`; the daemon adds `@rostrum/workflow` and `uuid`.
 
@@ -720,12 +791,12 @@ Also reuse `minimum.json` for an empty result and `sequential.json` for the gree
 
 | Location | Setup and what we should see |
 | --- | --- |
-| New `packages/workflow/src/execution.test.ts` | Waiting snapshots identify unmet dependencies. Stopping snapshots include failures and outstanding work. A terminal failure can't carry a successful output or active work. No tests that only pin enum lists or wording. |
+| New `packages/workflow/src/execution/schemas.test.ts` | Waiting snapshots identify unmet dependencies. Stopping snapshots include failures and outstanding work. A terminal failure can't carry a successful output or active work. No tests that only pin enum lists or wording. |
 | New daemon preparation and input/output-schema tests | A number declaration rejects a string without coercing it. Malformed schemas and unresolved external references are refused before admission. Valid local references work. `format` annotations don't reject values. Literal prototype-sensitive and dotted names keep their values. An omitted optional input or unbound optional argument receives its declared default; an explicit `null` doesn't, and an unresolved explicit reference fails rather than falling back to the default. A refusal lists every failure found, not just the first. |
-| New `execution/workflow-engine.test.ts` | Reverse the declared step order; repeat advancement, queue delivery, and completion; return an immediately resolved result. Each reached task runs once, each successor sees only committed output, and wrong-run or stale results can't corrupt another visit. |
+| New `engine/workflow-engine.test.ts` | Reverse the declared step order; repeat advancement, queue delivery, and completion; return an immediately resolved result. Each reached task runs once, each successor sees only committed output, and wrong-run or stale results can't corrupt another visit. |
 | The same engine suite, with controlled visit states and executors | Create one visit whose dependencies aren't all completed, then satisfy them and see exactly one dispatch. No outstanding work plus unmet dependencies fails with a location. No continuation and no result fails with a different code. A pending disconnected step doesn't fail a successful run. These internal cases don't enable parallel invocation. |
 | The same engine suite, with controlled settlement and clock | Hold one run while a second completes or fails; their inputs and outcomes stay separate. A task deadline stops new work, stays stopping until the task actually settles, and ignores late output. Terminal state doesn't change on repeated delivery or inspection. |
-| New tests next to `compatibility.ts` and the stage 8 suite | Each row of the D12 table produces its finding with a location: an unknown operation, invalid `config`, an invalid declaration, an invalid default, a missing and an undeclared argument, a `gt` on a string output, an undeclared output, a `divide` step declaring `value` as a string, and a string literal bound to `add`'s `left`. A `{"type":"number"}` input bound to a `minimum: 0` argument is a mismatch; the same input declared with `minimum: 1` passes, as does `integer` into `number`. A consumer using `not`, or a differing `pattern`, is unprovable. A producer using `not` against a plain consumer passes. Every catalog schema uses only the comparable set. Preparation reports each finding as its failure code. |
+| New tests next to `static-compatibility-check.ts`, `schema-containment.ts`, and the stage 8 suite | Each row of the D12 table produces its finding with a location: an unknown operation, invalid `config`, an invalid declaration, an invalid default, a missing and an undeclared argument, a `gt` on a string output, an undeclared output, a `divide` step declaring `value` as a string, and a string literal bound to `add`'s `left`. A `{"type":"number"}` input bound to a `minimum: 0` argument is a mismatch; the same input declared with `minimum: 1` passes, as does `integer` into `number`. A consumer using `not`, or a differing `pattern`, is unprovable. A producer using `not` against a plain consumer passes. Every catalog schema uses only the comparable set. Preparation reports each finding as its failure code. |
 | New tests next to the operation modules | Divide by zero and negative zero, and trigger arithmetic overflow, through the local executor. Check for the specific domain failure, not just that a promise resolves. |
 | New engine and snapshot checks | Return an operation output with the wrong type, a missing required member, or a non-finite number; no invalid output reaches a successor. Mutating a returned object can't change committed output. |
 | New run-service and controller or client tests next to those modules | Cover every HTTP outcome in the table. Malformed and wrong-identity upstream responses fail safely. POST is never retried. Both services accept and refuse the same invocation envelopes. Authoring's existing decoder and error shapes still work. Race cancellation against admission with a delayed publication lookup, and check that no late run appears. |
