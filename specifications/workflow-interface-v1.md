@@ -318,7 +318,7 @@ Validation starts from raw text and runs an eight-stage pipeline in a fixed orde
 | 5. Conditional semantics | Branch and default present; every condition-referenced step listed in `dependencies`; operators from the allowed set; leaf refs well-formed | Identity, Graph |
 | 6. Path and termination | Every reachable path ends at a terminal `result` step or an end-workflow branch; terminal steps outside loop bodies typed `result` | Graph, Conditional |
 | 7. Data references | Every `{ "ref": "..." }` syntactically valid and resolvable to a declared input, an upstream step output, or an in-scope loop variable | Identity, Graph |
-| 8. Input and output compatibility | Declared input and output schemas are valid JSON Schema 2020-12; no binding's producer and consumer types are definitely incompatible. See [Input and output compatibility](#input-and-output-compatibility) | Data references |
+| 8. Input and output compatibility | Task operations exist and their `config` is valid; declared input and output schemas are valid JSON Schema 2020-12; required arguments are bound and no undeclared ones are; every binding's producer provably fits its consumer. See [Input and output compatibility](#input-and-output-compatibility) | Data references |
 
 ### Findings
 
@@ -330,12 +330,21 @@ All findings are blocking in v1.
 
 v1 checks that each reference resolves to a declared input or output and that the producing step completes before the consuming step.
 
-A blocking static compatibility check is [approved for v1 in place](../decisions/pre-production-compatibility.md#boundaries-and-consequences). It is not yet recorded here as implemented or verified; [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) owns that work. Under it, validation reports:
+A blocking static compatibility check is [approved for v1 in place](../decisions/pre-production-compatibility.md#boundaries-and-consequences). It is not yet recorded here as implemented or verified; [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) owns that work. It checks, before any run, every constraint JSON Schema can express on a value known at publication. Under it, validation reports these blocking findings:
 
-- a blocking finding for each declared workflow input or step output schema that is not a valid JSON Schema 2020-12 schema;
-- a blocking `workflow.io.type-mismatch` finding when a binding's producer and consumer can never agree: their JSON Schema `type` sets don't overlap, with `integer` counted as `number`, or a literal value fails the consumer's schema.
+- `workflow.operation.unknown` when a task's `config.operation` isn't in the operation catalog of the validating release;
+- `workflow.operation.invalid-config` when the rest of a task's `config` doesn't satisfy that operation's configuration schema;
+- `workflow.io.invalid-schema` for each declared workflow input or step output schema that is not a valid JSON Schema 2020-12 schema;
+- `workflow.io.missing-argument` when a task doesn't bind an argument its operation's input schema requires, and `workflow.io.undeclared-argument` when it binds one that schema doesn't allow;
+- `workflow.io.undeclared-output` when a step declares an output its operation's output schema doesn't require;
+- `workflow.io.type-mismatch` when a producer isn't contained in its consumer: some value the producer allows is rejected by the consumer;
+- `workflow.io.unprovable` when containment can't be decided, naming the keyword responsible.
 
-A task's consumer schema is its operation's input schema, taken from the operation catalog of the validating release. A step's declared output schema is also compared with its operation's output schema. A schema without `type` accepts any type, and other keywords are not compared, so a runtime may still fail when a produced value does not satisfy a consumer. The executing runtime repeats the check with its own catalog before it accepts a run.
+A task's consumer schema is its operation's input schema for the bound argument; a `result` step has no consumer schema. A producer is a literal, a workflow input's declared schema, or the operation's output schema for a referenced step output, which must also be contained in that step's declared output schema. A loop variable's producer is the `items` schema of its collection's producer. A task's bound arguments are also checked together as one object against the operation's whole input schema.
+
+A literal is validated against its consumer's full schema. For schema producers, containment is decided keyword by keyword over `type` (with `integer` contained in `number`), `const`, `enum`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, identical `pattern`, `items`, `prefixItems`, `minItems`, `maxItems`, `properties`, `required`, `additionalProperties`, `minProperties`, `maxProperties`, `allOf`, `anyOf`, and local non-recursive `$ref`. Annotation keywords, including `format`, are ignored. Any other consumer keyword makes the binding unprovable. Producer keywords outside the set are ignored, which can only refuse a binding, never pass one that can fail.
+
+The executing runtime repeats the check with its own catalog before it accepts a run, and still checks every actual value at run time.
 
 ## Examples
 

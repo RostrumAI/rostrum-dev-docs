@@ -12,7 +12,7 @@
 
 - Rostrum can validate and publish an immutable workflow. It cannot run one: `main` has no execution code of any kind.
 - PR #64 tried to build shared contracts, preparation, and an engine. It was closed unmerged on 2026-09-19. Its shared contracts and preparation become Checkpoint 1 here; its engine model is replaced by the visit model in this document.
-- The owner has made these decisions during review: successful runs and steps are called `completed` ([D6](#d6--step-and-run-states-with-completed-meaning-success)); breaking changes are allowed before production, including fixing self-dependency in v1 ([D11](#d11--breaking-changes-are-allowed-before-production)); static input/output compatibility is a shared workflow-library check that blocks publication ([D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation)); and run responses have no size limits yet ([Limits and configuration](#limits-and-configuration)).
+- The owner has made these decisions during review: successful runs and steps are called `completed` ([D6](#d6--step-and-run-states-with-completed-meaning-success)); breaking changes are allowed before production, including fixing self-dependency in v1 ([D11](#d11--breaking-changes-are-allowed-before-production)); static input/output compatibility is a shared workflow-library check that blocks publication unless every binding is proven to fit ([D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation)); and run responses have no size limits yet ([Limits and configuration](#limits-and-configuration)).
 - The parent blueprint has not been adopted, so implementation cannot start yet.
 
 ## The problem
@@ -112,9 +112,9 @@ Preparation answers a narrower question: can this daemon release execute this pu
 `prepare` takes a parsed document plus, for an invocation, the run's publication (its workflow ID, publication number, format version, and digest), rather than the repository's `Publication` row. It collects every failure it finds instead of stopping at the first:
 
 1. Parse the integrity-checked canonical text with `JSON.parse`, and check its format and document shape with the existing `WorkflowDocumentSchema`. This confirms the daemon can read the document without repeating graph, termination, or reference validation. Check that the document ID and format match the stored publication.
-2. Check that every declared step is supported, not just the ones on the reachable path. Each task needs a supported operation and configuration; a result step has no configuration; there's no conditional or loop behavior; and each step has at most one distinct successor. Refuse a step that depends on itself, even in a publication created before the validator fix.
+2. Check that every declared step is supported, not just the ones on the reachable path. A result step has no configuration; there's no conditional or loop behavior; and each step has at most one distinct successor. Refuse a step that depends on itself, even in a publication created before the validator fix.
 3. Compile the workflow input schemas and step output schemas into checks for actual values, with the shared schema compiler (see [D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv)). If this release can't interpret a schema, refuse it rather than silently ignoring a constraint the author expects to be enforced.
-4. Run the shared static compatibility check ([D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation)) with this daemon's operation catalog. A publication that passed under a different Control API release can still be refused here.
+4. Run the shared static check ([D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation)) with this daemon's operation catalog: known operations, valid configuration, required and declared arguments and outputs, and bindings proven to fit. A publication that passed under a different Control API release can still be refused here.
 5. Turn every binding into either a literal owned by the prepared workflow or a reference the engine can resolve during the run.
 6. Build the **prepared workflow**: an immutable, process-local object holding its publication, the entry step, every declared step by ID, each step's successors and dependencies, its prepared bindings, its declared outputs, and the compiled checks.
 
@@ -133,7 +133,7 @@ When preparation refuses, it does so before any run exists, with a typed reason:
 | Situation | Reason |
 | --- | --- |
 | Invalid stored JSON, a digest or canonicalization failure, or a document identity that doesn't match its publication | `corrupt_publication` |
-| Unsupported document version or shape, step type, configuration, control flow, binding, or schema, or a binding whose types can never match | `unsupported_execution` |
+| Unsupported document version or shape, step type, configuration, control flow, binding, or schema, or anything the shared static check rejects | `unsupported_execution` |
 | Missing, undeclared, or invalid invocation inputs | `invalid_inputs` |
 
 A refusal reports every failure it finds, sanitized and located with JSON Pointers. Publication findings remain the authoring validator's contract; these failures explain why this daemon can't accept an invocation.
@@ -421,7 +421,7 @@ Status: proposed.
 
 Dead-run and timeout causes are reported through `ExecutionFailure.code`, next to the run status and `stopping` flag, rather than through a separate, loosely related substatus field.
 
-The new shared `ExecutionFailure` shape has a code, a message, a JSON Pointer path, and a step ID when a step is responsible. The codes are `self_dependency`, `unmet_dependencies`, `missing_result`, `task_timeout`, `execution_error`, `task_error`, `numeric_overflow`, `division_by_zero`, and `io_type_mismatch`. Preparation uses `self_dependency` and `io_type_mismatch`; the others describe failures in accepted runs. Dependency paths point into the publication. Operation errors point into the operation's input or output. Timeouts and engine-wide errors use the empty pointer when there's no narrower location. Messages are sanitized.
+The new shared `ExecutionFailure` shape has a code, a message, a JSON Pointer path, and a step ID when a step is responsible. The codes are `self_dependency`, `unmet_dependencies`, `missing_result`, `task_timeout`, `execution_error`, `task_error`, `numeric_overflow`, `division_by_zero`, and the static-check codes below. Preparation uses `self_dependency` and the static-check codes from [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation): `unknown_operation`, `invalid_config`, `invalid_schema`, `missing_argument`, `undeclared_argument`, `undeclared_output`, `io_type_mismatch`, and `io_unprovable`; the others describe failures in accepted runs. Dependency paths point into the publication. Operation errors point into the operation's input or output. Timeouts and engine-wide errors use the empty pointer when there's no narrower location. Messages are sanitized.
 
 All failure codes are declared in one catalog in `packages/workflow/src/execution.ts`, including codes only one operation returns, such as `division_by_zero`. Operation declarations list which of these codes they can return instead of defining their own, so the errors of every node and operation type are found in one file.
 
@@ -433,24 +433,57 @@ Before the first production deployment, we propose needed breaking changes and u
 
 ### D12 — Static input/output compatibility is shared by publication and preparation
 
-Status: owner decision (2026-09-22). This changes v1 in place under [D11](#d11--breaking-changes-are-allowed-before-production). The [v1 specification](../specifications/workflow-interface-v1.md#input-and-output-compatibility) has been amended; the validator code hasn't been changed yet.
+Status: owner decision (2026-09-22; extended on 2026-09-23 to every constraint JSON Schema can express, with unknown operations and invalid configuration rejected at publication). This changes v1 in place under [D11](#d11--breaking-changes-are-allowed-before-production). The [v1 specification](../specifications/workflow-interface-v1.md#input-and-output-compatibility) has been amended; the validator code hasn't been changed yet.
 
-Today nothing checks, before a run, whether the value a binding supplies can match what its consumer needs. Say a `divide` step feeds an `add` step, but the `divide` step declares its `value` output as `{"type":"string"}`. That document publishes, and the run only fails when the step executes. Stage 8 of publication validation exists for this kind of check, but it emits nothing in v1.
+Today nothing checks, before a run, whether the value a binding supplies can match what its consumer needs. Say a `divide` step feeds an `add` step, but the `divide` step declares its `value` output as `{"type":"string"}`. That document publishes, and the run only fails when the step executes. Stage 8 of publication validation exists for this kind of check, but it emits nothing in v1. Publication also accepts any operation name and any `config`.
 
-`@rostrum/workflow` gains the operation catalog and a static compatibility check that both services call:
+The rule is: every constraint JSON Schema can express is checked before a run, wherever the value it applies to is known at publication. The only values left entirely to the runtime checks in [D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv) are invocation inputs, which arrive with each run.
 
-- The Control API runs it as stage 8 of publication validation. A definite mismatch is a blocking `workflow.io.type-mismatch` finding, so drafts show it while they're edited and publishing fails.
-- The daemon runs it again during preparation with its own copy of the catalog. The two processes can run different releases, so a publication that passed at the Control API can still be refused as `unsupported_execution` with an `io_type_mismatch` failure.
+`@rostrum/workflow` gains the operation catalog and one static check that both services call:
 
-The check compares each binding's producer with its consumer:
+- The Control API runs it as stage 8 of publication validation. Every finding is blocking, so drafts show it while they're edited and publishing fails.
+- The daemon runs it again during preparation with its own copy of the catalog. The two processes can run different releases, so a publication that passed at the Control API can still be refused as `unsupported_execution` with the matching failure.
 
-- **Producers** are a workflow input's declared schema, a literal value, or a step output. A step output must satisfy both the step's declared schema for that member and its operation's output schema, so the check also compares those two with each other.
-- **Consumers** are the consuming operation's input schema for that argument. Result steps have no consumer schema.
-- **A mismatch** is reported only when the two sides can never both hold: their `type` sets don't overlap, with `integer` counted as a `number`, or a literal value fails the consumer's schema. A schema without `type` accepts any type. Other keywords, such as `minimum` or `pattern`, aren't compared, because deciding whether one schema fits inside another isn't tractable in general. Anything the check can't decide is left to the runtime value checks in [D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv).
+The check covers:
 
-In the example, the `divide` step's declared `value` (string) can't overlap the operation's output (number), so the finding points at the step's `outputs.value` declaration.
+| What | Rule | Finding / preparation failure |
+| --- | --- | --- |
+| Operation | A task's `config.operation` names an operation in the catalog. | `workflow.operation.unknown` / `unknown_operation` |
+| Configuration | The rest of the task's `config` is valid against that operation's configuration schema. `config` is literal, so this is an ordinary Ajv validation and is complete. | `workflow.operation.invalid-config` / `invalid_config` |
+| Declared schemas | Every workflow input and step output declaration is a valid JSON Schema 2020-12 schema ([D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv)). | `workflow.io.invalid-schema` / `invalid_schema` |
+| Arguments | A task binds every argument its operation's input schema requires, and nothing that schema doesn't allow. | `workflow.io.missing-argument` / `missing_argument`, `workflow.io.undeclared-argument` / `undeclared_argument` |
+| Declared outputs | Each output a step declares is a member its operation's output schema requires, so a reference to it always resolves, and every value the operation can return for it fits the declaration. | `workflow.io.undeclared-output` / `undeclared_output`, or a mismatch below |
+| Bindings | Every value a producer can supply is accepted by its consumer. | `workflow.io.type-mismatch` / `io_type_mismatch` |
+| Unprovable bindings | A binding the check can't prove is blocked, not deferred to the runtime. | `workflow.io.unprovable` / `io_unprovable` |
 
-The other capability checks stay in the daemon: supported format, step types, and control flow. Self-dependency is checked in both places, as [Self-dependency](#self-dependency) describes. An unknown operation name is also left to preparation. Whether publication should reject unknown operations, now that it has a catalog, is a separate owner decision. The Control API reads operation declarations, never their implementations.
+**Producers and consumers.** A binding's consumer is the operation's input schema for that argument; result steps have no consumer, so anything fits. Its producer is one of:
+
+- a literal, which is validated against the consumer's full schema with Ajv, so every keyword is enforced;
+- a workflow input, described by its declaration (every declared workflow input is required at invocation, so the reference always resolves);
+- a step output, described by the operation's output schema for that member, which the declarations rule guarantees fits inside the step's own declaration.
+
+The task's bound arguments are also checked together, as one object whose properties are the producers and whose required members are the bound names. That object must fit the operation's whole input schema, so object-level constraints such as `minProperties` apply too.
+
+**Must always fit.** A binding passes only when the producer's schema is contained in the consumer's: every value the producer allows, the consumer accepts. Overlap isn't enough. A workflow input declared `{"type":"number"}` bound to an argument that requires `{"type":"number","minimum":0}` is blocked, because `-1` passes the first and fails the second. The author fixes it by declaring the input with `"minimum": 0` or tighter. `integer` counts as contained in `number`.
+
+**What the check can compare.** Containment is proven keyword by keyword over a fixed set:
+
+- `type`, `const`, `enum`;
+- `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`;
+- `minLength`, `maxLength`, and `pattern` when the consumer's pattern is identical to one of the producer's;
+- `items`, `prefixItems`, `minItems`, `maxItems`;
+- `properties`, `required`, `additionalProperties`, `minProperties`, `maxProperties`;
+- `allOf`; `anyOf`, where each producer branch must fit, or the producer must fit one consumer branch; and local, non-recursive `$ref` into `$defs`, by inlining.
+
+Annotations don't constrain values and are ignored: `title`, `description`, `default`, `examples`, `$comment`, `deprecated`, `readOnly`, `writeOnly`, and `format`, which [D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv) treats as an annotation.
+
+If the consumer uses anything else, such as `not`, `oneOf`, `if`/`then`/`else`, `uniqueItems`, `contains`, `patternProperties`, `propertyNames`, `dependentRequired`, `dependentSchemas`, the `unevaluated*` keywords, a recursive `$ref`, or a `pattern` the producer doesn't repeat, the binding is unprovable and blocked with a finding that names the keyword. A producer keyword outside the set is ignored. That only makes the producer look wider than it is, so the check can refuse a binding that would have worked, but never pass one that can fail. Authors keep every JSON Schema feature in a declaration that no binding compares, and in literal values.
+
+The checker is ours, in `@rostrum/workflow`: a table of per-keyword rules, not a general schema reasoner. Catalog operations are held to the same bar. Their input, output, and configuration schemas use only the comparable set, and their output schemas are as tight as their implementations guarantee, because authors can't tighten an operation's output.
+
+The runtime value checks in [D3](#d3--declared-input-and-output-schemas-are-checked-with-ajv) stay. They're the only check on invocation inputs, and they catch an operation implementation that breaks its own declaration.
+
+The other capability checks stay in the daemon: supported format, step types, and control flow. Self-dependency is checked in both places, as [Self-dependency](#self-dependency) describes. The Control API reads operation declarations, never their implementations.
 
 The consequence is that a publication's validity now depends on the operation catalog in the Control API's release. Before production, v1 changes in place. After that, changing an operation's schemas so that existing publications become mismatches follows the specification's breaking-change rules.
 
@@ -604,7 +637,7 @@ The workflow package also gains the pieces both services run:
 | `packages/workflow/src/operations/greet.ts`, `add.ts`, `divide.ts` | One operation declaration per module: name, configuration schema, input and output schemas, and the failure codes it can return. No implementation. |
 | `packages/workflow/src/operations/catalog.ts` | Lists the declarations in one static catalog that publication validation and preparation both read. |
 | `packages/workflow/src/declared-schemas.ts` | Holds the configured Ajv compiler for author-declared schemas. Publication uses it to report invalid declarations; preparation uses it to build value checks. |
-| `packages/workflow/src/compatibility.ts` | The static compatibility check from [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation). It takes a document and a catalog and returns located mismatches. |
+| `packages/workflow/src/compatibility.ts` | The static compatibility check from [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation). It takes a document and a catalog and returns every located finding, using a per-keyword containment checker in the same module. |
 | `packages/workflow/src/validation/stages/input-output-compatibility-stage.ts` | Reports invalid declared schemas and the check's mismatches as blocking findings, registered in the existing findings catalog. |
 
 Update `packages/workflow/package.json`, `apis/daemon/package.json`, and the lockfile together. `@rostrum/workflow` adds `ajv`; the daemon adds `@rostrum/workflow` and `uuid`.
@@ -623,7 +656,7 @@ The implementing engineer owns each checkpoint and records its pull request and 
 
 **Owner and review:** the implementing engineer. API and specification reviewers check refusal reasons and locations, the shared inspection schemas, and the v1 changes. This review doesn't reopen the owner's `completed` or pre-production decisions.
 
-**Verification:** keep the digest-vector tests. Add graph-stage tests for reachable and unreachable self-dependency. Add stage 8 tests for definite mismatches, undecidable schemas, and invalid declarations. Test preparation refusals, literal-key bindings, declared-schema checking, and complete refusal lists. Preparing the [worked example](#worked-example) directly, with no HTTP or Postgres, resolves its bindings and refuses a string amount, a missing input, an undeclared input, and an unknown operation, each with its own reason and location. `bun run check` and `bun test` pass. No schema-enum snapshot or JSON-guard suite is needed.
+**Verification:** keep the digest-vector tests. Add graph-stage tests for reachable and unreachable self-dependency. Add stage 8 tests for every rule in D12, including unprovable bindings. Test preparation refusals, literal-key bindings, declared-schema checking, and complete refusal lists. Preparing the [worked example](#worked-example) directly, with no HTTP or Postgres, resolves its bindings and refuses a string amount, a missing input, an undeclared input, and an unknown operation, each with its own reason and location. `bun run check` and `bun test` pass. No schema-enum snapshot or JSON-guard suite is needed.
 
 **Recovery and handoff:** nothing in production uses the vocabulary yet. Revert the workflow-package and daemon changes together so no consumer is left on a half-published contract.
 
@@ -687,7 +720,7 @@ Also reuse `minimum.json` for an empty result and `sequential.json` for the gree
 | New `execution/workflow-engine.test.ts` | Reverse the declared step order; repeat advancement, queue delivery, and completion; return an immediately resolved result. Each reached task runs once, each successor sees only committed output, and wrong-run or stale results can't corrupt another visit. |
 | The same engine suite, with controlled visit states and executors | Create one visit whose dependencies aren't all completed, then satisfy them and see exactly one dispatch. No outstanding work plus unmet dependencies fails with a location. No continuation and no result fails with a different code. A pending disconnected step doesn't fail a successful run. These internal cases don't enable parallel invocation. |
 | The same engine suite, with controlled settlement and clock | Hold one run while a second completes or fails; their inputs and outcomes stay separate. A task deadline stops new work, stays stopping until the task actually settles, and ignores late output. Terminal state doesn't change on repeated delivery or inspection. |
-| New tests next to `compatibility.ts` and the stage 8 suite | A `divide` step declaring `value` as a string, and a string literal bound to `add`'s `left`, are each reported with a location. Overlapping types, `integer` into `number`, and schemas without `type` pass. An invalid declared schema is a publication finding. Preparation reports the same mismatch as `io_type_mismatch`. |
+| New tests next to `compatibility.ts` and the stage 8 suite | Each row of the D12 table produces its finding with a location: an unknown operation, invalid `config`, an invalid declaration, a missing and an undeclared argument, an undeclared output, a `divide` step declaring `value` as a string, and a string literal bound to `add`'s `left`. A `{"type":"number"}` input bound to a `minimum: 0` argument is a mismatch; the same input declared with `minimum: 1` passes, as does `integer` into `number`. A consumer using `not`, or a differing `pattern`, is unprovable. A producer using `not` against a plain consumer passes. Every catalog schema uses only the comparable set. Preparation reports each finding as its failure code. |
 | New tests next to the operation modules | Divide by zero and negative zero, and trigger arithmetic overflow, through the local executor. Check for the specific domain failure, not just that a promise resolves. |
 | New engine and snapshot checks | Return an operation output with the wrong type, a missing required member, or a non-finite number; no invalid output reaches a successor. Mutating a returned object can't change committed output. |
 | New run-service and controller or client tests next to those modules | Cover every HTTP outcome in the table. Malformed and wrong-identity upstream responses fail safely. POST is never retried. Both services accept and refuse the same invocation envelopes. Authoring's existing decoder and error shapes still work. Race cancellation against admission with a delayed publication lookup, and check that no late run appears. |

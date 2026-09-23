@@ -22,7 +22,7 @@ The exception permits contract changes, not unrelated data deletion or retroacti
 
 For [workflow format v1](../specifications/workflow-interface-v1.md#graph-topology), rejecting direct self-dependency is approved in place: a step must not list its own ID in its `dependencies`. Publication validation must report a blocking finding rather than publish a step that would wait for itself. This is an accepted contract correction, not a claim that the validator has been changed or verified. M2 Epic 2 owns its implementation and evidence.
 
-Also for v1, a blocking static input/output compatibility check is approved in place (2026-09-22): publication rejects invalid declared schemas and bindings whose producer and consumer types can never agree, as described in [Input and output compatibility](../specifications/workflow-interface-v1.md#input-and-output-compatibility). Existing publications keep their content; new invocations of one that fails the check are refused. M2 Epic 2 owns its implementation and evidence.
+Also for v1, a blocking static input/output compatibility check is approved in place (2026-09-22): publication rejects invalid declared schemas and bindings whose producer and consumer types can never agree. On 2026-09-23 this was extended: publication also rejects unknown operations, invalid task configuration, missing or undeclared arguments and outputs, and any binding whose producer can't be proven to fit its consumer, as described in [Input and output compatibility](../specifications/workflow-interface-v1.md#input-and-output-compatibility). Existing publications keep their content; new invocations of one that fails the check are refused. M2 Epic 2 owns its implementation and evidence.
 
 ## End of the exception
 
