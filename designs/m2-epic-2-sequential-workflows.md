@@ -2,7 +2,7 @@
 
 - Epic: [M2 Epic 2: Execute sequential workflows](../epics/m2/2-execute-sequential-workflows.md)
 - Owner: Stephen Pierre-Paul
-- Status: proposed design, revised for owner review on 2026-09-22. Checkpoint 1 is implemented on an unmerged branch (see [Progress](#progress)); nothing else described here is implemented. Owner decisions are labeled as such below; everything else is a proposal under review.
+- Status: proposed design, revised for owner review on 2026-09-22. Checkpoints 1 and 2 are implemented on unmerged branches (see [Progress](#progress)); nothing else described here is implemented. Owner decisions are labeled as such below; everything else is a proposal under review.
 - Repository baseline: [`RostrumAI/rostrum`](https://github.com/RostrumAI/rostrum) `main` at [`16622bc`](https://github.com/RostrumAI/rostrum/commit/16622bc), inspected 2026-09-19, with no local changes to the files described here. Paths are relative to that repository unless they begin with `../`.
 - Parent blueprint: not established yet. Stephen Pierre-Paul owns adopting it and linking this design before implementation starts, as the [delivery methodology](../epic-delivery-methodology.md#resuming-work-from-prior-combined-plans) requires. Review of this design can continue in the meantime.
 - Superseded attempt: `feat/m2-sequential-checkpoint-1` ([rostrum #64](https://github.com/RostrumAI/rostrum/pull/64)) was closed without merging, and none of it is in `main`. This design does not bring back its generic JSON guards or its engine model. The review findings that still apply are listed under [Carried over from PR #64](#carried-over-from-pr-64).
@@ -837,7 +837,7 @@ After implementation, record command output, pull-request links, review outcomes
 - [x] Address the owner's follow-up review questions: removed response caps, shared static compatibility, visit metadata frames (then called activations), the asynchronous operation contract, and diagrams (2026-09-22).
 - [ ] Adopt and link the parent blueprint, then complete the reviews in [What still needs review](#what-still-needs-review). Stephen Pierre-Paul owns the handoff. On 2026-09-23 the owner directed implementation of Checkpoints 1 and 2 to start before this handoff, with the Checkpoint 1 API and specification review delegated to the implementing agent and the Checkpoint 2 execution review kept by the owner.
 - [x] Checkpoint 1: execution contracts and preparation (2026-09-23). See [Checkpoint 1 evidence](#checkpoint-1-evidence).
-- [ ] Checkpoint 2: direct daemon-local execution.
+- [ ] Checkpoint 2: direct daemon-local execution. Implemented and verified (2026-09-23); waiting for the owner's execution and concurrency review. See [Checkpoint 2 evidence](#checkpoint-2-evidence).
 - [ ] Checkpoint 3: invocation and inspection through both services.
 - [ ] Checkpoint 4: real-service, lifecycle, and operator evidence.
 
@@ -871,6 +871,49 @@ Verification at `1026a8e`:
 | `bun run check:boundaries` | 17 controllers reach no database. |
 
 Review: the delegated API and specification review was an independent reviewer agent, briefed with this design's D2, D3, D9, D10, and D12 and Checkpoint 1 sections and `AGENTS.md`, plus an automated high-effort code review of the same diff. Resolved findings: unsound `multipleOf` containment, mismatches reported where a fit was only unprovable, inspection schemas that let step states contradict the run status, unprovable condition operands reported as mismatches, unexplained casts, a recursive freeze that could overflow the stack, an evaluator failure reported as invalid inputs instead of `unsupported_execution`, a result-step output that skipped the compatibility check, a duplicated graph build and helper, and unused package exports. Not changed: the daemon's `uuid` dependency, which this design places in Checkpoint 1, is first used by the Checkpoint 2 engine; and the containment check recomputes some per-conjunction values, which is acceptable at current workflow sizes and noted for a later profile. Against the API reviewer's questions: refusal reasons and failure locations are distinct, the inspection schemas reject impossible states, and each v1 change is recorded in the specification.
+
+### Checkpoint 2 evidence
+
+Implemented on `feat/m2-sequential-execution-cp2` in `rostrum`, stacked on Checkpoint 1, through commit `80f3d36` ([rostrum #68](https://github.com/RostrumAI/rostrum/pull/68)). The engine isn't reachable over HTTP yet; Checkpoint 3 waits for the owner's review of this checkpoint.
+
+**State transitions.** `WorkflowEngine` is the only writer of run state. Each run holds its fixed publication, prepared workflow, and inputs, a map of visits keyed by step ID plus encoded metadata (empty in this Epic), and a `progress` value.
+
+- Pure functions in `run-state.ts` replace a visit's state. The order is waiting, then ready, then either running (with its work ID and start time) or, for a result step, completed directly. A visit ends completed, with frozen output, or failed, with a frozen failure and a start time only if work started.
+- The same functions move a run from queued to running, from running to stopping when it records its first failure, and from stopping to failed once its work settles. A running run becomes completed when its result commits.
+- Nodes return decisions and the engine applies them. A task node returns its successors; a result node returns its resolved inputs as the final result, committed in the same step as its completed visit.
+
+**Where each execution-review concern is handled** (`apis/daemon/src/services/runs/engine/workflow-engine.ts`):
+
+| Concern | Handling |
+| --- | --- |
+| Visit ownership | Only the engine writes visits or progress. Nodes, the executor, and inspection read or return data. Committed outputs, results, and failures are deep-frozen, so snapshots can't change them. |
+| Duplicate dispatch | Advancement and dispatch run in separate scheduled turns, each merged by a per-run flag. The dispatch queue is only an index: `dispatchNext` re-reads the visit, requires it to be ready, allows one outstanding task per run, and claims at most one visit per turn. The claim records the work ID and running state before the executor is called. |
+| Completion matching | Each executor promise settles its own dispatch once. The result's run and work IDs must match. Only a failure code the operation declares, with a pointer relative to the step, is trusted. Anything else, including a rejection or a synchronous throw, is `execution_error`. |
+| Failure handling | The first failure stops dispatch and clears the run's queue entries. The run stays stopping while work is outstanding and fails when it settles; a completion that arrives while the run is stopping keeps its output inspectable but starts nothing. A dead run fails as `unmet_dependencies`, located at the dependency, or as `missing_result`. A result reached beside unfinished visits fails the run. Every turn, settlement, and deadline runs guarded, so an unexpected throw becomes `execution_error` instead of stranding the run. |
+| Timeout settlement | The deadline starts at the claim. On expiry the engine records `task_timeout` and aborts the task's controller, but keeps the visit running until the executor's promise settles; then the visit fails with the timeout and late output is discarded. Settlement cancels the deadline and removes the task's abort forwarding. |
+| Lifecycle | `admit` takes a registration. The engine releases it exactly once, when the run is terminal and has no outstanding work, and forwards its abort signal to executing tasks. |
+
+Verification at `80f3d36`:
+
+| Command | Result |
+| --- | --- |
+| `bun run check` | Every package typechecks; 17 controllers reach no database. |
+| `bun run lint` | 296 files checked; the 8 warnings on `main`, none new. |
+| `bun test` | 590 pass, 0 fail across 54 files. |
+| `bun run check:boundaries` | 17 controllers reach no database. |
+| `bun run --filter @rostrum/daemon smoke:execution` | Calculation 90/10/4 completes with `{"total":100,"perPerson":25}`; 90/4 with the default surcharge with `{"total":90,"perPerson":22.5}`; people 0 fails with `division_by_zero` at `/steps/1/inputs/divisor`, the addition's output `{"value":90}` still inspectable and no result; `minimum.json` completes with `{}`; `sequential.json` with `{"greeting":"Hello, Ada!"}`. Exit code 0. |
+
+The engine suite drives the engine with a manual scheduler, clock, and executor. It covers reversed step order and repeated advancement (each task runs once), immediate results (at most one task per turn), successors reading only committed output, dependency gating and both dead-run failures, a pending disconnected step, wrong-run results, rejecting and throwing executors, invalid outputs (wrong type, missing member, non-finite, extra member, and a step declaration the output breaks), independent runs while one is held, timeout settlement, deadline cancellation, and terminal stability.
+
+Self-review, the same process as Checkpoint 1 (an independent reviewer briefed as the execution reviewer, plus an automated high-effort review), found no double dispatch, double release, stuck run, or late commit on paths preparation allows. Resolved findings: a result reached beside unfinished visits made inspection throw, snapshots shared mutable result and failure objects, a throw during settlement could strand a run, a stopping run whose last work succeeded waited a turn to fail, executor failure codes and paths were trusted unchecked, the timeout wasn't range-checked, the smoke script could hang, and tests didn't prove deadline cancellation.
+
+Known gaps for the owner's review:
+
+- Aborting a run's registration aborts the executing task but doesn't stop the run: later steps are still dispatched, each with an already-aborted signal. Checkpoint 3's shutdown work decides whether a forced abort records a failure and closes dispatch.
+- `RUN_TASK_TIMEOUT_MS` isn't wired yet; the engine takes the value as a constructor option and rejects values timers can't honor. The configuration belongs to Checkpoint 3.
+- Paths with several successors or joins are exercised only by engine tests that build prepared workflows directly; preparation still refuses them. A result step ends the run only when nothing else is unfinished, a rule Epic 4 may revisit.
+- Inspection repeats the engine's unmet-dependency calculation with empty metadata; the loop Epic should share one implementation when visits gain metadata.
+- As designed, finished runs stay in memory, and a task that never settles keeps its run stopping; interruption is cooperative.
 
 ## Outcome
 
