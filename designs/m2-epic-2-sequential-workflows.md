@@ -2,7 +2,7 @@
 
 - Epic: [M2 Epic 2: Execute sequential workflows](../epics/m2/2-execute-sequential-workflows.md)
 - Owner: Stephen Pierre-Paul
-- Status: proposed design, revised for owner review on 2026-09-22. Nothing described here is implemented. Owner decisions are labeled as such below; everything else is a proposal under review.
+- Status: proposed design, revised for owner review on 2026-09-22. Checkpoints 1 and 2 are implemented on unmerged branches (see [Progress](#progress)); nothing else described here is implemented. Owner decisions are labeled as such below; everything else is a proposal under review.
 - Repository baseline: [`RostrumAI/rostrum`](https://github.com/RostrumAI/rostrum) `main` at [`16622bc`](https://github.com/RostrumAI/rostrum/commit/16622bc), inspected 2026-09-19, with no local changes to the files described here. Paths are relative to that repository unless they begin with `../`.
 - Parent blueprint: not established yet. Stephen Pierre-Paul owns adopting it and linking this design before implementation starts, as the [delivery methodology](../epic-delivery-methodology.md#resuming-work-from-prior-combined-plans) requires. Review of this design can continue in the meantime.
 - Superseded attempt: `feat/m2-sequential-checkpoint-1` ([rostrum #64](https://github.com/RostrumAI/rostrum/pull/64)) was closed without merging, and none of it is in `main`. This design does not bring back its generic JSON guards or its engine model. The review findings that still apply are listed under [Carried over from PR #64](#carried-over-from-pr-64).
@@ -13,7 +13,7 @@
 - Rostrum can validate and publish an immutable workflow. It cannot run one: `main` has no execution code of any kind.
 - PR #64 tried to build shared contracts, preparation, and an engine. It was closed unmerged on 2026-09-19. Its shared contracts and preparation become Checkpoint 1 here; its engine model is replaced by the visit model in this document.
 - The owner has made these decisions during review: successful runs and steps are called `completed` ([D6](#d6--step-and-run-states-with-completed-meaning-success)); breaking changes are allowed before production, including fixing self-dependency in v1 ([D11](#d11--breaking-changes-are-allowed-before-production)); static input/output compatibility is a shared workflow-library check that blocks publication unless every binding is proven to fit ([D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation)); and run responses have no size limits yet ([Limits and configuration](#limits-and-configuration)).
-- The parent blueprint has not been adopted, so implementation cannot start yet.
+- The parent blueprint has not been adopted. On 2026-09-23 the owner directed Checkpoints 1 and 2 to start anyway; see [Progress](#progress).
 
 ## The problem
 
@@ -168,7 +168,7 @@ Ajv turns a JSON Schema into a JavaScript function that checks a value. The `ajv
 | `coerceTypes`, `useDefaults`, `removeAdditional` | Convert `"5"` to `5`, insert `default` values, and strip extra properties. | Off, the defaults. A check never changes the value it checks. |
 | `loadSchema` | Fetches remote schemas for `compileAsync`. | Not provided, and only synchronous `compile` is used, so a `$ref` never reaches the network. Ajv resolves local references itself. A schema marked `$async` is refused. |
 | `addUsedSchema` | Registers every compiled schema that has an `$id` on the Ajv instance, so other schemas can reference it. | Off. Otherwise two workflows declaring the same `$id` would collide or see each other's schemas. Compiled checks live with the prepared workflow, not in a global cache keyed by author-supplied IDs. |
-| `code.regExp` | Replaces the regular-expression engine used for `pattern` and `patternProperties`. | Proposed: a linear-time engine such as RE2 (see the risk below). Check that the `re2` native module works under Bun before adopting it. |
+| `code.regExp` | Replaces the regular-expression engine used for `pattern` and `patternProperties`. | A linear-time engine (see the risk below): `re2js`, a pure-JavaScript port of RE2, because the native `re2` module doesn't load under Bun 1.4. Adopted in Checkpoint 1. |
 
 A missing reference or unsupported schema becomes a located finding at publication and a located `unsupported_execution` refusal at preparation. We don't add a schema walker to rewrite annotations or resolve references.
 
@@ -429,11 +429,11 @@ All failure codes are declared in one catalog in `packages/workflow/src/executio
 
 Status: owner decision, accepted 2026-09-19 and recorded in [Pre-production compatibility](../decisions/pre-production-compatibility.md).
 
-Before the first production deployment, we propose needed breaking changes and update v1 in place, rather than preserving unreleased behavior through shims. Fixing direct self-dependency is approved under this policy and doesn't need a separate compatibility decision. The v1 specification has been amended; the validator code hasn't been changed yet.
+Before the first production deployment, we propose needed breaking changes and update v1 in place, rather than preserving unreleased behavior through shims. Fixing direct self-dependency is approved under this policy and doesn't need a separate compatibility decision. The v1 specification has been amended, and Checkpoint 1 implements the validator change.
 
 ### D12 — Static input/output compatibility is shared by publication and preparation
 
-Status: owner decision (2026-09-22; extended on 2026-09-23 to every constraint JSON Schema can express, with unknown operations and invalid configuration rejected at publication, declared defaults for optional inputs, and condition operand checks). This changes v1 in place under [D11](#d11--breaking-changes-are-allowed-before-production). The [v1 specification](../specifications/workflow-interface-v1.md#input-and-output-compatibility) has been amended; the validator code hasn't been changed yet.
+Status: owner decision (2026-09-22; extended on 2026-09-23 to every constraint JSON Schema can express, with unknown operations and invalid configuration rejected at publication, declared defaults for optional inputs, and condition operand checks). This changes v1 in place under [D11](#d11--breaking-changes-are-allowed-before-production). The [v1 specification](../specifications/workflow-interface-v1.md#input-and-output-compatibility) has been amended, and Checkpoint 1 implements the check.
 
 Today nothing checks, before a run, whether the value a binding supplies can match what its consumer needs. Say a `divide` step feeds an `add` step, but the `divide` step declares its `value` output as `{"type":"string"}`. That document publishes, and the run only fails when the step executes. Stage 8 of publication validation exists for this kind of check, but it emits nothing in v1. Publication also accepts any operation name and any `config`.
 
@@ -506,7 +506,7 @@ Implementation still needs an adopted parent blueprint and these reviews. Stephe
 
 A step that lists itself in `dependencies` would wait for itself forever. The current validator accepts this, because cycle detection only looks at control edges and a step trivially dominates itself (see [Discoveries](#discoveries)).
 
-We fix this in two places. Publication validation rejects direct self-dependency in v1, including on unreachable steps, under the approved [pre-production policy](../decisions/pre-production-compatibility.md). The finding points at the offending array member, is registered in the existing findings catalog, and gets graph-stage test coverage. The specification already states this rule; the code change is still to do. Preparation also refuses self-dependency, with `self_dependency`, so publications created before the fix can't start a run that would hang.
+We fix this in two places. Publication validation rejects direct self-dependency in v1, including on unreachable steps, under the approved [pre-production policy](../decisions/pre-production-compatibility.md). The finding points at the offending array member, is registered in the existing findings catalog, and gets graph-stage test coverage. The specification states this rule, and Checkpoint 1 implements it. Preparation also refuses self-dependency, with `self_dependency`, so publications created before the fix can't start a run that would hang.
 
 ### A run that can't make progress
 
@@ -835,11 +835,85 @@ After implementation, record command output, pull-request links, review outcomes
 - [x] Re-baseline this design against `rostrum` `main` and the closed checkpoint-1 attempt (2026-09-19).
 - [x] Address the owner's review comments through 2026-09-19, including the compatibility decision and `completed` terminology (2026-09-20). The owner's review is still in progress.
 - [x] Address the owner's follow-up review questions: removed response caps, shared static compatibility, visit metadata frames (then called activations), the asynchronous operation contract, and diagrams (2026-09-22).
-- [ ] Adopt and link the parent blueprint, then complete the reviews in [What still needs review](#what-still-needs-review). Stephen Pierre-Paul owns the handoff.
-- [ ] Checkpoint 1: execution contracts and preparation.
-- [ ] Checkpoint 2: direct daemon-local execution.
+- [ ] Adopt and link the parent blueprint, then complete the reviews in [What still needs review](#what-still-needs-review). Stephen Pierre-Paul owns the handoff. On 2026-09-23 the owner directed implementation of Checkpoints 1 and 2 to start before this handoff, with the Checkpoint 1 API and specification review delegated to the implementing agent and the Checkpoint 2 execution review kept by the owner.
+- [x] Checkpoint 1: execution contracts and preparation (2026-09-23). See [Checkpoint 1 evidence](#checkpoint-1-evidence).
+- [ ] Checkpoint 2: direct daemon-local execution. Implemented and verified (2026-09-23); waiting for the owner's execution and concurrency review. See [Checkpoint 2 evidence](#checkpoint-2-evidence).
 - [ ] Checkpoint 3: invocation and inspection through both services.
 - [ ] Checkpoint 4: real-service, lifecycle, and operator evidence.
+
+### Checkpoint 1 evidence
+
+Implemented on `feat/m2-sequential-execution-cp1` in `rostrum`, through commit `1026a8e` ([rostrum #67](https://github.com/RostrumAI/rostrum/pull/67)). The v1 specification changes are on `feat/m2-sequential-execution` in this repository.
+
+What the checkpoint delivers:
+
+- `@rostrum/workflow/execution` holds the shared statuses, failure-code catalog, refusal reasons, run publication, and acceptance and inspection schemas. Inspection snapshots are unions of closed per-state variants, and each run status admits only the step states it can have.
+- The declared-schema compiler, the containment check, the operation catalog (`greet`, `add`, `divide`), and the static compatibility check live in `@rostrum/workflow`. Stage 8 reports every [D12](#d12--static-inputoutput-compatibility-is-shared-by-publication-and-preparation) finding, and the graph stage reports `workflow.graph.self-dependency`.
+- Workflow inputs are declared as `{ schema, default? }`. The four valid fixtures that named operations outside the catalog were rewritten with catalog operations and keep their purposes; `sequential-calculation.json` is the worked example. Both digest implementations agree on every regenerated vector.
+- The daemon's `PublicationPreparer` refuses unsupported publications and invalid inputs with every located failure, the three operations are implemented and registered, and `resolveBindings` resolves literals, run inputs, and completed outputs with own-member lookups.
+
+Decisions made during implementation, delegated by the owner:
+
+- `pattern` runs on `re2js`, a pure-JavaScript port of RE2, through Ajv's `code.regExp`. The native `re2` module failed to load under Bun 1.4 with a Node ABI mismatch. Patterns that need lookaround or backreferences are invalid schemas.
+- The catalog adds the failure codes `invalid_document`, `unsupported_format`, `publication_mismatch`, `unsupported_step_type`, `unsupported_control_flow`, `unresolved_binding`, `missing_input`, `undeclared_input`, `invalid_input`, and `invalid_output`. Preparation reports `workflow.condition.operand-mismatch` as `io_type_mismatch`.
+- `prepare` takes the stored canonical text and the run's publication, so an unparsable document is `corrupt_publication`. An operation argument's default is prepared as an owned literal binding, so the engine's binding resolution has one path for literals and defaults.
+- A `result` step can't declare outputs (`workflow.io.undeclared-output`), because its resolved inputs are the run's result; otherwise a binding to one would skip the compatibility check.
+- `multipleOf` is proven only for integer step sizes on producers bounded within the safe-integer range, matching the runtime's exact division. The containment check reports a mismatch only when a failing value exists; otherwise the binding is unprovable.
+- A declared schema without an `$id` is compiled under a private base, so a `$ref` to its own root resolves while `addUsedSchema` stays off.
+
+Verification at `1026a8e`:
+
+| Command | Result |
+| --- | --- |
+| `bun run check` | Every package typechecks; the controller boundary check reports 17 controllers reach no database. |
+| `bun run lint` | 285 files checked; 8 warnings, all present on `main` before this work. |
+| `bun test` | 560 pass, 0 fail across 52 files (469 on the `main` baseline). |
+| `bun run check:boundaries` | 17 controllers reach no database. |
+
+Review: the delegated API and specification review was an independent reviewer agent, briefed with this design's D2, D3, D9, D10, and D12 and Checkpoint 1 sections and `AGENTS.md`, plus an automated high-effort code review of the same diff. Resolved findings: unsound `multipleOf` containment, mismatches reported where a fit was only unprovable, inspection schemas that let step states contradict the run status, unprovable condition operands reported as mismatches, unexplained casts, a recursive freeze that could overflow the stack, an evaluator failure reported as invalid inputs instead of `unsupported_execution`, a result-step output that skipped the compatibility check, a duplicated graph build and helper, and unused package exports. Not changed: the daemon's `uuid` dependency, which this design places in Checkpoint 1, is first used by the Checkpoint 2 engine; and the containment check recomputes some per-conjunction values, which is acceptable at current workflow sizes and noted for a later profile. Against the API reviewer's questions: refusal reasons and failure locations are distinct, the inspection schemas reject impossible states, and each v1 change is recorded in the specification.
+
+### Checkpoint 2 evidence
+
+Implemented on `feat/m2-sequential-execution-cp2` in `rostrum`, stacked on Checkpoint 1, through commit `80f3d36` ([rostrum #68](https://github.com/RostrumAI/rostrum/pull/68)). The engine isn't reachable over HTTP yet; Checkpoint 3 waits for the owner's review of this checkpoint.
+
+**State transitions.** `WorkflowEngine` is the only writer of run state. Each run holds its fixed publication, prepared workflow, and inputs, a map of visits keyed by step ID plus encoded metadata (empty in this Epic), and a `progress` value.
+
+- Pure functions in `run-state.ts` replace a visit's state. The order is waiting, then ready, then either running (with its work ID and start time) or, for a result step, completed directly. A visit ends completed, with frozen output, or failed, with a frozen failure and a start time only if work started.
+- The same functions move a run from queued to running, from running to stopping when it records its first failure, and from stopping to failed once its work settles. A running run becomes completed when its result commits.
+- Nodes return decisions and the engine applies them. A task node returns its successors; a result node returns its resolved inputs as the final result, committed in the same step as its completed visit.
+
+**Where each execution-review concern is handled** (`apis/daemon/src/services/runs/engine/workflow-engine.ts`):
+
+| Concern | Handling |
+| --- | --- |
+| Visit ownership | Only the engine writes visits or progress. Nodes, the executor, and inspection read or return data. Committed outputs, results, and failures are deep-frozen, so snapshots can't change them. |
+| Duplicate dispatch | Advancement and dispatch run in separate scheduled turns, each merged by a per-run flag. The dispatch queue is only an index: `dispatchNext` re-reads the visit, requires it to be ready, allows one outstanding task per run, and claims at most one visit per turn. The claim records the work ID and running state before the executor is called. |
+| Completion matching | Each executor promise settles its own dispatch once. The result's run and work IDs must match. Only a failure code the operation declares, with a pointer relative to the step, is trusted. Anything else, including a rejection or a synchronous throw, is `execution_error`. |
+| Failure handling | The first failure stops dispatch and clears the run's queue entries. The run stays stopping while work is outstanding and fails when it settles; a completion that arrives while the run is stopping keeps its output inspectable but starts nothing. A dead run fails as `unmet_dependencies`, located at the dependency, or as `missing_result`. A result reached beside unfinished visits fails the run. Every turn, settlement, and deadline runs guarded, so an unexpected throw becomes `execution_error` instead of stranding the run. |
+| Timeout settlement | The deadline starts at the claim. On expiry the engine records `task_timeout` and aborts the task's controller, but keeps the visit running until the executor's promise settles; then the visit fails with the timeout and late output is discarded. Settlement cancels the deadline and removes the task's abort forwarding. |
+| Lifecycle | `admit` takes a registration. The engine releases it exactly once, when the run is terminal and has no outstanding work, and forwards its abort signal to executing tasks. |
+
+Verification at `80f3d36`:
+
+| Command | Result |
+| --- | --- |
+| `bun run check` | Every package typechecks; 17 controllers reach no database. |
+| `bun run lint` | 296 files checked; the 8 warnings on `main`, none new. |
+| `bun test` | 590 pass, 0 fail across 54 files. |
+| `bun run check:boundaries` | 17 controllers reach no database. |
+| `bun run --filter @rostrum/daemon smoke:execution` | Calculation 90/10/4 completes with `{"total":100,"perPerson":25}`; 90/4 with the default surcharge with `{"total":90,"perPerson":22.5}`; people 0 fails with `division_by_zero` at `/steps/1/inputs/divisor`, the addition's output `{"value":90}` still inspectable and no result; `minimum.json` completes with `{}`; `sequential.json` with `{"greeting":"Hello, Ada!"}`. Exit code 0. |
+
+The engine suite drives the engine with a manual scheduler, clock, and executor. It covers reversed step order and repeated advancement (each task runs once), immediate results (at most one task per turn), successors reading only committed output, dependency gating and both dead-run failures, a pending disconnected step, wrong-run results, rejecting and throwing executors, invalid outputs (wrong type, missing member, non-finite, extra member, and a step declaration the output breaks), independent runs while one is held, timeout settlement, deadline cancellation, and terminal stability.
+
+Self-review, the same process as Checkpoint 1 (an independent reviewer briefed as the execution reviewer, plus an automated high-effort review), found no double dispatch, double release, stuck run, or late commit on paths preparation allows. Resolved findings: a result reached beside unfinished visits made inspection throw, snapshots shared mutable result and failure objects, a throw during settlement could strand a run, a stopping run whose last work succeeded waited a turn to fail, executor failure codes and paths were trusted unchecked, the timeout wasn't range-checked, the smoke script could hang, and tests didn't prove deadline cancellation.
+
+Known gaps for the owner's review:
+
+- Aborting a run's registration aborts the executing task but doesn't stop the run: later steps are still dispatched, each with an already-aborted signal. Checkpoint 3's shutdown work decides whether a forced abort records a failure and closes dispatch.
+- `RUN_TASK_TIMEOUT_MS` isn't wired yet; the engine takes the value as a constructor option and rejects values timers can't honor. The configuration belongs to Checkpoint 3.
+- Paths with several successors or joins are exercised only by engine tests that build prepared workflows directly; preparation still refuses them. A result step ends the run only when nothing else is unfinished, a rule Epic 4 may revisit.
+- Inspection repeats the engine's unmet-dependency calculation with empty metadata; the loop Epic should share one implementation when visits gain metadata.
+- As designed, finished runs stay in memory, and a task that never settles keeps its run stopping; interruption is cooperative.
 
 ## Outcome
 

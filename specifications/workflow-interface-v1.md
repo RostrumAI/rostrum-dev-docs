@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Accepted |
 | Machine-readable schema source | [`packages/workflow/src/schema.ts`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/src/schema.ts) |
-| Last updated | 2026-09-20 |
+| Last updated | 2026-09-23 |
 
 ## What this specification defines
 
@@ -84,8 +84,20 @@ The shape fixes the extension mechanism, not the step catalog. Two demonstrative
 
 | Type | `config` | `outputs` | Meaning |
 | --- | --- | --- | --- |
-| `task` | `{ "operation": "<string>" }` plus type-specific fields | Declared by the author | A deterministic unit of work. Its handler produces the declared outputs. |
+| `task` | `{ "operation": "<string>" }` plus the members the operation's configuration schema allows | Declared by the author; each must be an output the operation always returns | A deterministic unit of work. Its operation, selected from the [operation catalog](#operation-catalog), produces the outputs. |
 | `result` | none required | none | A terminal step. Its `inputs` bind the workflow outputs; the resolved `inputs` object is the run's terminal result. |
+
+### Operation catalog
+
+A task's `config.operation` names an operation in the operation catalog of the release that validates or executes the document. Each operation declares a configuration schema for the rest of `config`, its arguments (each a schema plus an optional default, the same shape as an [input declaration](#input-declarations)), an output schema, and the [failure codes](#execution-failures) it can report. Every catalog schema uses only the keywords the [compatibility check](#input-and-output-compatibility) can compare, and each output schema is closed and requires its members.
+
+| Operation | Configuration | Arguments | Output | Failure codes |
+| --- | --- | --- | --- | --- |
+| `greet` | none | `name`: string | `greeting`: `Hello, <name>!` | none |
+| `add` | none | `left`: number; `right`: number, default `0` | `value`: number | `numeric_overflow` |
+| `divide` | none | `dividend`: number; `divisor`: number | `value`: number | `division_by_zero`, `numeric_overflow` |
+
+The operations use JSON-number arithmetic with no coercion. A divisor of zero of either sign is `division_by_zero`; a result too large to represent is `numeric_overflow`.
 
 ### Step-type extension
 
@@ -107,7 +119,7 @@ The step graph is a directed acyclic graph (DAG). Publication validation must en
 6. **Terminal steps.** A step with neither `successors` nor `conditional` is terminal. A terminal step outside a loop body must be typed `result`. Within a loop body, the terminal step may be any type, and its outputs are collected per iteration.
 7. **Path endings.** Every reachable path ends at a terminal `result` step or at a conditional branch or default whose `next` is omitted. An end-workflow branch ends the run with the conditional step's resolved outputs as the terminal result.
 
-The direct self-dependency correction is [approved for v1 in place](../decisions/pre-production-compatibility.md#boundaries-and-consequences). It is not yet recorded here as implemented or verified; [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) owns that work. This restriction applies to a step's own `dependencies`, not to a conditional's dependency on the step whose outputs it evaluates.
+Direct self-dependency is rejected in v1 under the [pre-production compatibility decision](../decisions/pre-production-compatibility.md#boundaries-and-consequences), on reachable and unreachable steps alike. Validation reports `workflow.graph.self-dependency` at the offending `dependencies` member. This restriction applies to a step's own `dependencies`, not to a conditional's dependency on the step whose outputs it evaluates.
 
 ## Data references
 
@@ -341,26 +353,75 @@ All findings are blocking in v1.
 
 v1 checks that each reference resolves to a declared input or output and that the producing step completes before the consuming step.
 
-A blocking static compatibility check is [approved for v1 in place](../decisions/pre-production-compatibility.md#boundaries-and-consequences). It is not yet recorded here as implemented or verified; [M2 Epic 2](../epics/m2/2-execute-sequential-workflows.md) owns that work. It checks, before any run, every constraint JSON Schema can express on a value known at publication. Under it, validation reports these blocking findings:
+Stage 8 runs a blocking static compatibility check, adopted for v1 in place under the [pre-production compatibility decision](../decisions/pre-production-compatibility.md#boundaries-and-consequences). It checks, before any run, every constraint JSON Schema can express on a value known at publication. Validation reports these blocking findings:
 
 - `workflow.operation.unknown` when a task's `config.operation` isn't in the operation catalog of the validating release;
 - `workflow.operation.invalid-config` when the rest of a task's `config` doesn't satisfy that operation's configuration schema;
 - `workflow.io.invalid-schema` for each declared workflow input or step output schema that is not a valid JSON Schema 2020-12 schema;
 - `workflow.io.invalid-default` for each declared default, on a workflow input or a catalog argument, that isn't valid against its schema;
 - `workflow.io.missing-argument` when a task doesn't bind an argument its operation declares without a default, and `workflow.io.undeclared-argument` when it binds one the operation doesn't declare;
-- `workflow.io.undeclared-output` when a step declares an output its operation's output schema doesn't require;
+- `workflow.io.undeclared-output` when a step declares an output its operation's output schema doesn't require, or a `result` step declares any output, since its resolved inputs are the run's result;
 - `workflow.io.type-mismatch` when a producer isn't contained in its consumer: some value the producer allows is rejected by the consumer;
 - `workflow.io.unprovable` when containment can't be decided, naming the keyword responsible;
 - `workflow.condition.operand-mismatch` when a condition leaf's referenced value isn't provably suited to its operator: `gt`, `gte`, `lt`, and `lte` need a number and a number `value`; `contains` needs a string with a string `value`, or an array; `in` and `notin` need an array `value`; and for `eq`, `neq`, `in`, and `notin` the comparison value, or at least one of its elements, must be allowed by the referenced schema.
 
-A task's consumer schema is its operation's declared schema for the bound argument; a `result` step has no consumer schema. A producer is a literal, a workflow input's declared schema, or the operation's output schema for a referenced step output, which must also be contained in that step's declared output schema. A loop variable's producer is the `items` schema of its collection's producer.
-A literal is validated against its consumer's full schema. For schema producers, containment is decided keyword by keyword over `type` (with `integer` contained in `number`), `const`, `enum`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, identical `pattern`, `items`, `prefixItems`, `minItems`, `maxItems`, `properties`, `required`, `additionalProperties`, `minProperties`, `maxProperties`, `allOf`, `anyOf`, and local non-recursive `$ref`. Annotation keywords, including `format`, are ignored. Any other consumer keyword makes the binding unprovable. Producer keywords outside the set are ignored, which can only refuse a binding, never pass one that can fail.
+A task's consumer schema is its operation's declared schema for the bound argument; a `result` step has no consumer schema. A producer is a literal, a workflow input's declared schema, or the operation's output schema for a referenced step output, which must also be contained in that step's declared output schema. A loop step's reserved `results` output is described as `{"type": "array"}`; declaring `results` documents its element shape and isn't compared. A loop variable's producer is the `items` schema of its collection's producer, joined with any `prefixItems` entries.
+
+A literal is validated against its consumer's full schema. For schema producers, containment is decided keyword by keyword over `type` (with `integer` contained in `number`), `const`, `enum`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, identical `pattern`, `items`, `prefixItems`, `minItems`, `maxItems`, `properties`, `required`, `additionalProperties`, `minProperties`, `maxProperties`, `allOf`, `anyOf`, and local non-recursive `$ref`. `multipleOf` is proven only for integer step sizes on producers bounded within the safe-integer range, where division is exact. A producer's `oneOf` is read as `anyOf`, and a producer limited to a `const`, an `enum`, `null`, booleans, a range of at most 64 integers, or the empty string is checked value by value. A binding is reported as a mismatch only when some value the producer allows fails the consumer; when the producer has constraints the check doesn't read, the binding is unprovable instead. Annotation keywords, including `format`, are ignored. Any other consumer keyword makes the binding unprovable. Producer keywords outside the set are ignored, which can only refuse a binding, never pass one that can fail.
+
+Declared schemas are JSON Schema 2020-12 and are checked strictly: an unknown keyword, an invalid keyword value, a `$ref` that doesn't resolve inside the same schema, and an `$async` schema are each `workflow.io.invalid-schema`. `pattern` and `patternProperties` run on a linear-time regular-expression engine with RE2 syntax, so a match can't backtrack. A pattern that needs lookaround or backreferences is `workflow.io.invalid-schema` at publication and `invalid_schema` when a runtime prepares the publication.
 
 The executing runtime repeats the check with its own catalog before it accepts a run, and still checks every actual value at run time.
 
+## Execution capability
+
+A publication that validated under one release may use something another release can't execute, because the Control API and the daemon can run different releases. Before accepting a run, the daemon therefore prepares the publication: it checks what its own release can execute and refuses the invocation before any run exists if it can't. Preparation doesn't rerun publication validation. It checks:
+
+- that the stored document parses, has the v1 shape, and is the workflow and format the publication recorded;
+- that every declared step, reachable or not, is a supported type, and that the document uses no control flow this release doesn't execute;
+- that no step depends on itself, even in a publication created before that rule was validated;
+- the static compatibility check, against the operations this daemon implements;
+- that every reference in a binding names a declared input or a declared output of an existing step.
+
+Each invocation's inputs are then checked against the input declarations: every supplied name is declared, every input without a default is supplied, and each value satisfies its schema without coercion. An omitted input with a default receives it; an explicit `null` is a supplied value.
+
+### Run refusals
+
+A refused invocation reports one reason and every failure found, not just the first.
+
+| Reason | Meaning |
+| --- | --- |
+| `publication_not_found` | The requested publication doesn't exist. |
+| `corrupt_publication` | The stored publication can't be trusted: it isn't valid JSON, fails its integrity check, or isn't the workflow and format the publication recorded. |
+| `unsupported_execution` | This release can't execute the publication: its shape, format, step types, control flow, bindings, or schemas, or anything the static compatibility check rejects. |
+| `invalid_inputs` | The invocation's inputs don't match the workflow's input declarations. |
+
+### Execution failures
+
+Every failure, whether it refuses an invocation or fails an accepted run, is an execution failure: a `code` from the catalog below, a sanitized `message` that never repeats supplied values or raw exceptions, a JSON Pointer `path`, and the `stepId` of the responsible step when there is one. Paths point into the publication for document and capability failures, into the invocation for input failures, and into a step's `inputs` or `outputs` for operation failures. The empty pointer means no narrower location applies. Operations declare which of these codes they report; they don't define their own.
+
+| Code | When |
+| --- | --- |
+| `invalid_document` | The stored document isn't valid JSON, doesn't have the v1 shape, or has step links that don't resolve. |
+| `unsupported_format` | The document's `workflowFormatVersion` isn't one this release executes. |
+| `publication_mismatch` | The document isn't the workflow or format its publication recorded. |
+| `unsupported_step_type` | A step's `type` isn't one this release executes. |
+| `unsupported_control_flow` | The document uses conditionals, loops, or parallel successors, which this release doesn't execute. |
+| `self_dependency` | A step lists itself in `dependencies`. |
+| `unresolved_binding` | A reference can't be resolved: at preparation it names no declared input or output; during a run its producer hasn't completed. |
+| `unknown_operation`, `invalid_config`, `invalid_schema`, `invalid_default`, `missing_argument`, `undeclared_argument`, `undeclared_output`, `io_type_mismatch`, `io_unprovable` | The static compatibility check reported the matching `workflow.operation.*` or `workflow.io.*` finding. A `workflow.condition.operand-mismatch` finding is reported as `io_type_mismatch`. |
+| `missing_input`, `undeclared_input`, `invalid_input` | An invocation omits a required input, supplies an undeclared one, or supplies a value its schema rejects. |
+| `unmet_dependencies` | An accepted run has waiting steps whose dependencies can never complete. |
+| `missing_result` | An accepted run has nothing left to run and no result. |
+| `task_timeout` | A task ran past the daemon's task deadline. |
+| `task_error` | An operation failed unexpectedly. |
+| `invalid_output` | An operation returned output its output schema or the step's declared outputs reject. |
+| `execution_error` | The runtime couldn't evaluate a check or match a task's result to its work. |
+| `numeric_overflow`, `division_by_zero` | An operation's arithmetic result was too large to represent, or its divisor was zero. |
+
 ## Examples
 
-The example set lives in `packages/workflow/tests/fixtures/`, one file per document, organized as `valid/` (publishable), `incomplete/` (saveable drafts with blocking findings from stages 3 through 8), `invalid-shape/` (rejected by the format-version stage or the document schema for one specific reason), and `invalid-parse/` (rejected at parse). Each non-valid fixture has a committed expected-findings manifest under `packages/workflow/tests/fixtures/expected/<category>/` that records the exact codes, blocking flags, JSON Pointers, related locations, details, and source locations the validator must return. Each valid example's digest vector is committed in [`digest-vectors.json`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/tests/fixtures/digest-vectors.json) and asserted by the workflow library tests.
+The example set lives in `packages/workflow/src/fixtures/`, one file per document, organized as `valid/` (publishable), `incomplete/` (saveable drafts with blocking findings from stages 3 through 8), `invalid-shape/` (rejected by the format-version stage or the document schema for one specific reason), and `invalid-parse/` (rejected at parse). Each non-valid fixture has a committed expected-findings manifest under `packages/workflow/src/fixtures/expected/<category>/` that records the exact codes, blocking flags, JSON Pointers, related locations, details, and source locations the validator must return. Each valid example's digest vector is committed in [`digest-vectors.json`](https://github.com/RostrumAI/rostrum/blob/main/packages/workflow/src/fixtures/digest-vectors.json) and asserted by the workflow library tests.
 
 ### Valid — sequential with terminal result
 
@@ -394,8 +455,9 @@ Binds a name, produces a greeting, returns it. (`tests/fixtures/valid/sequential
 }
 ```
 
-The smallest publishable workflow is a single terminal `result` step (`tests/fixtures/valid/minimum.json`). The remaining valid examples demonstrate conditional branching with two terminal results, fan-out and fan-in (a PR review workflow: one trigger spawns five parallel reviewers that fan into a summarizer), a bounded loop over a collection, and grouped AND/OR conditions:
+The smallest publishable workflow is a single terminal `result` step (`tests/fixtures/valid/minimum.json`). The remaining valid examples use the catalog operations. They demonstrate a sequential calculation that adds an optional surcharge to an amount and divides it among people, conditional branching on a score with two terminal results, fan-out and fan-in (a bill split: one addition fans out to two divisions that join in a final addition), a bounded loop that adds an offset to each number in a collection, and grouped AND/OR conditions:
 
+- `tests/fixtures/valid/sequential-calculation.json`
 - `tests/fixtures/valid/conditional-branching.json`
 - `tests/fixtures/valid/fan-out-fan-in.json`
 - `tests/fixtures/valid/bounded-loop.json`
@@ -431,7 +493,7 @@ In `unknown-step-type.json`, the step's `type` is not in the registry. The error
 }
 ```
 
-The remaining incomplete drafts each isolate one post-schema finding: an unfinished branch target, a fresh workflow missing `firstNode` and `steps`, duplicate step ids, a `firstNode` that names no step, a step `config` that violates its type schema, mutually exclusive control-flow fields, a top-level cycle and a loop-body cycle, an unreachable dependency (branch-then-join), a nested loop, conditional-semantics violations (missing dependency, unknown operator, malformed condition ref, condition referencing an unknown step, empty condition group), a non-result terminal, and data references that are malformed or do not resolve. Two fixtures fail at parse instead: `invalid-parse/duplicate-key.json` carries a duplicate object key and `invalid-parse/malformed-syntax.json` is not valid JSON; both are errors, never drafts.
+The remaining incomplete drafts each isolate one post-schema finding: an unfinished branch target, a fresh workflow missing `firstNode` and `steps`, duplicate step ids, a `firstNode` that names no step, a step `config` that violates its type schema, mutually exclusive control-flow fields, a top-level cycle and a loop-body cycle, a step that depends on itself, an unreachable dependency (branch-then-join), a nested loop, conditional-semantics violations (missing dependency, unknown operator, malformed condition ref, condition referencing an unknown step, empty condition group), a non-result terminal, and data references that are malformed or do not resolve. Two fixtures fail at parse instead: `invalid-parse/duplicate-key.json` carries a duplicate object key and `invalid-parse/malformed-syntax.json` is not valid JSON; both are errors, never drafts.
 
 ### Invalid — unknown format version
 
