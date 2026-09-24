@@ -843,7 +843,7 @@ After implementation, record command output, pull-request links, review outcomes
 
 ### Checkpoint 1 evidence
 
-Implemented on `feat/m2-sequential-execution-cp1` in `rostrum`, through commit `1026a8e`. The v1 specification changes are on `feat/m2-sequential-execution` in this repository.
+Implemented on `feat/m2-sequential-execution-cp1` in `rostrum`, through commit `1026a8e` ([rostrum #67](https://github.com/RostrumAI/rostrum/pull/67)). The v1 specification changes are on `feat/m2-sequential-execution` in this repository.
 
 What the checkpoint delivers:
 
